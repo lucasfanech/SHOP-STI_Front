@@ -1,145 +1,361 @@
 <div class="flex flex-col gap-6 p-6 sm:p-8 md:p-10">
-  <!-- Deux colonnes responsives, sur mobile, les colonnes passent en une seule colonne -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <div>
-      <h1 class="text-2xl font-bold py-3"><fa-icon [icon]="faBarcode"></fa-icon> Scanner Entrées-Sorties</h1>
-      <h2 class="text-xl">
-        Scannez votre matricule, choisissez une action "Retirer un produit" ou "Déposer un produit" et sélectionnez le produit à retirer ou déposer.
-      </h2>
-    </div>
-    <div class="bg-white shadow-md rounded-lg p-6">
-      <label class="block text-gray-700 font-bold mb-2">Utilisateur</label>
-      <div class="flex items-center gap-4">
-        <input class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md" [(ngModel)]="scan.badge" type="text" placeholder="Badge utilisateur">
-        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" (click)="detectBadge()">S'identifier</button>
-      </div>
-      <label class="block text-gray-700 font-lighter mb-2">Scannez votre carte</label>
 
-      <div *ngIf="user.username" class="mt-4">
-        <p class="text-green-500 text-lg font-bold">Vous êtes identifié en tant que {{ user.username }}</p>
-        <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 mt-2" (click)="disconnect()">Se déconnecter</button>
-      </div>
-    </div>
+  <div *ngIf="!isLoggedIn()" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+    <p class="font-bold">Accès au scan interdit</p>
+    <p>Vous devez être connecté avec votre badge pour effectuer un retrait.</p>
   </div>
 
-  <!-- line separator -->
-  <div class="border-b-2 border-gray-200"></div>
+  <div *ngIf="isLoggedIn()">
+    <h1 class="text-2xl font-bold py-3 flex items-center gap-3">
+      <fa-icon [icon]="faBarcode"></fa-icon>
+      Retrait d'outils
+    </h1>
+    <h2 class="text-xl mb-4">
+      Sélectionnez un casier pour voir et gérer ses stocks.
+    </h2>
 
-  <div *ngIf="user.username" class="mt-4">
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-      <button [ngClass]="history.type == 'withdraw' ? 'bg-blue-500 hover:bg-blue-700 text-white font-bold rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 p-5 text-2xl' : 'bg-gray-300 text-gray-700 font-bold rounded focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 p-5 text-2xl'" (click)="setType('withdraw')" [disabled]="!isButtonEnabled"><fa-icon [icon]="faArrowRightFromBracket"></fa-icon> Retrait</button>
-      <button [ngClass]="history.type == 'deposit' ? 'bg-blue-500 hover:bg-blue-700 text-white font-bold rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 p-5 text-2xl' : 'bg-gray-300 text-gray-700 font-bold rounded focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-2 p-5 text-2xl'" (click)="setType('deposit')" [disabled]="!isButtonEnabled"><fa-icon [icon]="faArrowRightToBracket"></fa-icon> Dépôt</button>
+    <div *ngIf="productFilters.length > 0" class="bg-white rounded-3xl shadow-xl p-5 mb-4">
+      <p class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">
+        Filtrer par type d'outil
+      </p>
+
+      <div class="flex flex-wrap gap-4">
+        <button
+          type="button"
+          class="flex flex-col items-center gap-2 px-4 py-3 rounded-2xl border-2 transition-all"
+          [ngClass]="activeFilterTitle === null
+            ? 'border-blue-500 bg-blue-50 shadow-md scale-105'
+            : 'border-gray-200 bg-gray-50 hover:border-gray-400'"
+          (click)="setFilter(null)">
+          <div class="w-14 h-14 rounded-full bg-gray-200 flex items-center justify-center">
+            <span class="text-xl">🔢</span>
+          </div>
+          <span class="text-xs font-semibold text-gray-700">Tous</span>
+          <span class="text-xs text-gray-400">{{ lockers.length }} casiers</span>
+        </button>
+
+        <button
+          *ngFor="let filter of productFilters"
+          type="button"
+          class="flex flex-col items-center gap-2 px-4 py-3 rounded-2xl border-2 transition-all"
+          [ngClass]="activeFilterTitle === filter.title
+            ? 'border-blue-500 bg-blue-50 shadow-md scale-105'
+            : 'border-gray-200 bg-gray-50 hover:border-gray-400'"
+          (click)="setFilter(filter.title)">
+          <img
+            [src]="filter.picture || 'assets/images/default_image.jpg'"
+            [alt]="filter.title"
+            class="w-14 h-14 rounded-full object-cover border border-gray-200">
+          <span class="text-xs font-semibold text-gray-700 text-center max-w-20">{{ filter.title }}</span>
+          <span class="text-xs text-gray-400">{{ getLockerCountByTitle(filter.title) }} emplacement(s)</span>
+        </button>
+      </div>
+
+      <div *ngIf="activeFilterTitle" class="mt-3 flex items-center gap-2 text-sm text-blue-700 font-medium">
+        <span class="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+        Filtre actif : <b>{{ activeFilterTitle }}</b> —
+        <button type="button" class="underline text-blue-500 hover:text-blue-700 ml-1" (click)="setFilter(null)">
+          Tout afficher
+        </button>
+      </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <!-- Retrait -->
-      <div *ngIf="history.type == 'withdraw'" class="bg-white shadow-md rounded-lg p-6">
-        <h1 class="text-2xl font-bold mb-4">Retirer un produit</h1>
-        <label class="block text-gray-700 font-bold mb-2">Choisir un produit disponible</label>
-        <select id="selectWithdraw" class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md" [(ngModel)]="stock.id" (change)="detectStock()">
-          <option value="" disabled selected>Choisir un produit disponible</option>
-          <option *ngFor="let item of availableStocks" [value]="item.id">{{ item.product.title }}</option>
-        </select>
-        <!-- Input pour scanner le produit -->
-        <div class="mt-4">
-          <label class="block text-gray-700 font-bold mb-2">Scanner le produit</label>
-          <input class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md" [(ngModel)]="stock.id" (change)="detectStock()" type="text" placeholder="Code produit">
-        </div>
+    <div class="bg-white rounded-3xl shadow-xl p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Casiers 1–24 + Mur</h2>
+      </div>
 
-        <div class="fixed inset-x-0 bottom-0 flex justify-center pb-4">
-          <button *ngIf="review.id && isStockSelected" [disabled]="!isButtonEnabled" [ngClass]="{'bg-gray-400 text-gray-700': !isButtonEnabled, 'bg-green-600 hover:bg-green-800 text-white': isButtonEnabled}" class="font-bold py-5 px-5 rounded text-xl" (click)="addScan('withdraw')">
-            Retirer le produit
+      <app-locker-grid
+        [itemTemplate]="scanCellTpl"
+        (boxClick)="openLockerDetails($event)">
+        <div class="flex flex-col rounded-xl overflow-hidden border border-gray-300 bg-gray-100 shadow-sm self-stretch">
+          <div *ngIf="wallStocks.length === 0"
+               class="flex-1 flex items-center justify-center text-gray-400 text-xs italic p-4 text-center w-24 sm:w-28">
+            Aucun stock hors casier
+          </div>
+
+          <button *ngFor="let stock of wallStocks"
+                  type="button"
+                  class="locker-cell relative block w-24 sm:w-28 flex-1 appearance-none border-0 border-b last:border-b-0 border-gray-300 bg-transparent p-0 m-0 text-left transition-transform duration-150 hover:z-10 hover:scale-[1.04] focus-visible:z-10 focus-visible:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  [class.cursor-pointer]="stock.available && stock.status !== 2"
+                  [class.cursor-not-allowed]="!(stock.available && stock.status !== 2)"
+                  (click)="stock.available && stock.status !== 2 ? openWallWithdrawDialog() : null">
+            <div class="w-full h-full flex flex-col items-center justify-center p-1.5"
+                 [ngClass]="{
+                   'bg-blue-500 text-black': stock.available && stock.status !== 2,
+                   'bg-red-500 text-white': !stock.available && stock.status !== 2,
+                   'bg-red-700 text-white': stock.status === 2
+                 }">
+              <div class="text-xs sm:text-sm leading-tight text-center">
+                <div class="font-bold mb-0.5">{{ stock.product.title }}</div>
+                <div>{{ stock.product.size }}</div>
+                <div>{{ stock.product.cmu }}</div>
+
+                <div *ngFor="let a of getAlitracerList(stock)" class="font-mono text-[9px] opacity-80 truncate">
+                  {{ a }}
+                </div>
+
+                <div class="font-semibold mt-0.5">
+                  <span *ngIf="stock.status === 2">🚫 HS</span>
+                  <span *ngIf="stock.status !== 2 && stock.available">Dispo</span>
+                  <span *ngIf="stock.status !== 2 && !stock.available">Emprunté</span>
+                </div>
+              </div>
+            </div>
           </button>
         </div>
-      </div>
-      <!-- Dépôt -->
-      <div *ngIf="history.type == 'deposit'" class="bg-white shadow-md rounded-lg p-6">
-        <h1 class="text-2xl font-bold mb-4">Retourner un produit</h1>
-        <label class="block text-gray-700 font-bold mb-2">Choisir un produit emprunté</label>
-        <select id="selectDeposit" class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md" [(ngModel)]="stock.id" (change)="detectStock()">
-          <option value="" disabled selected>Choisir un produit emprunté</option>
-          <option *ngFor="let item of loanedStocks" [value]="item.id">{{ item.product.title }}</option>
-        </select>
-        <!-- Input pour scanner le produit -->
-        <div class="mt-4">
-          <label class="block text-gray-700 font-bold mb-2">Scanner le produit</label>
-          <input class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md" [(ngModel)]="stock.id" (change)="detectStock()" type="text" placeholder="Code produit">
-        </div>
-        <div class="fixed inset-x-0 bottom-0 flex justify-center pb-4">
-          <button *ngIf="review.id && isStockSelected" [disabled]="!isButtonEnabled" [ngClass]="{'bg-gray-400 text-gray-700': !isButtonEnabled, 'bg-green-600 hover:bg-green-800 text-white': isButtonEnabled}" class="font-bold py-5 px-5 rounded text-xl" (click)="addScan('deposit')">
-            Retourner le produit
-          </button>
-        </div>
-      </div>
-      <!-- Caractéristiques du produit -->
-      <div class="bg-white shadow-md rounded-lg p-6">
-        <div *ngIf="review.id && isStockSelected" class="p-6">
-          <div class="flex justify-between items-center mb-4">
-            <div>
-              <div class="uppercase tracking-wide text-sm text-gray-500 font-semibold">Aperçu du produit</div>
-              <p class="text-lg leading-tight font-medium text-black">{{ review.id }} - {{ review.product.title }}</p>
-            </div>
-            <div>
-              <div class="uppercase tracking-wide text-sm text-gray-500 font-semibold">Statut</div>
-              <p class="text-lg leading-tight font-medium" [class]="getStatusClass()">{{ review.status == 0 ? 'NOK' : review.status == 1 ? 'OK' : 'HS' }}</p>
-            </div>
-            <div>
-              <div class="uppercase tracking-wide text-sm text-gray-500 font-semibold">Dernier contrôle effectué</div>
-              <p class="text-lg leading-tight text-gray-500">N/A</p>
-            </div>
-            <div>
-              <div class="uppercase tracking-wide text-sm text-gray-500 font-semibold">Date de création</div>
-              <p class="text-lg leading-tight text-gray-500">{{ review.creationDate| date:"dd/MM/yyyy" }}</p>
+      </app-locker-grid>
+
+      <ng-template #scanCellTpl let-num>
+        <div class="w-full h-full flex flex-col items-center justify-center p-1.5 transition-opacity"
+             [ngClass]="{
+               'bg-blue-500 text-black': lockersMap[num]?.state === 'allAvailable',
+               'bg-red-500 text-white': lockersMap[num]?.state === 'allBorrowed',
+               'bg-orange-400 text-black': lockersMap[num]?.state === 'mixed',
+               'bg-gray-300 text-black': !lockersMap[num] || lockersMap[num]?.state === 'empty',
+               'ring-4 ring-inset ring-yellow-400': lockersMap[num]?.matchesFilter,
+               'opacity-40': activeFilterTitle !== null && !lockersMap[num]?.matchesFilter
+             }">
+          <div class="text-xs sm:text-sm leading-tight text-center">
+            <div class="font-bold mb-0.5">Box {{ num }}</div>
+            <div *ngIf="lockersMap[num]?.firstStock as stock">
+              <div>{{ stock.title }}</div>
+              <div>{{ stock.size }} - {{ stock.cmu }}</div>
+              <div class="font-semibold mt-0.5">Qty : {{ lockersMap[num]?.ratio?.split('/')?.[0] }}</div>
             </div>
           </div>
-          <div class="flex">
-            <div class="flex-shrink-0">
-              <img class="h-48 w-48 object-cover" src="{{ review.product.picture ? review.product.picture : 'assets/images/default_image.jpg' }}" alt="Product Image">
-            </div>
-            <div class="ml-6">
-              <div class="grid grid-cols-2 gap-x-12">
-                <div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">Type</div>
-                    <div class="text-black">{{ review.product.type }}</div>
-                  </div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">Marque</div>
-                    <div class="text-black">N/A</div>
-                  </div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">Taille</div>
-                    <div class="text-black">{{ review.product.size }}</div>
-                  </div>
-                </div>
-                <div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">Emplacement</div>
-                    <div class="text-black">{{ review.product.location }}</div>
-                  </div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">Charge maximale d’utilisation</div>
-                    <div class="text-black">{{ review.product.cmu }}</div>
-                  </div>
-                  <div class="mt-4">
-                    <div class="text-gray-500">ID ALITRACER</div>
-                    <div class="text-black">N/A</div>
-                  </div>
-                </div>
+        </div>
+      </ng-template>
+
+      <div class="flex flex-wrap gap-4 justify-center mt-4 text-xs text-gray-600">
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-blue-500"></span> Tout disponible</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-orange-400"></span> Partiellement disponible</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-red-500"></span> Tout emprunté</span>
+        <span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-full bg-gray-300 border border-gray-400"></span> Vide</span>
+        <span *ngIf="activeFilterTitle" class="flex items-center gap-1.5">
+          <span class="inline-block w-3 h-3 rounded-sm ring-2 ring-yellow-400 bg-white"></span> Casiers filtrés
+        </span>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white rounded-3xl shadow-xl p-6 mt-4">
+      <div class="text-center">
+        <p class="text-3xl font-bold text-green-600">{{ stats.available }}</p>
+        <p class="text-gray-600 font-medium">Casiers avec au moins un stock dispo</p>
+      </div>
+      <div class="text-center">
+        <p class="text-3xl font-bold text-orange-600">{{ stats.empty }}</p>
+        <p class="text-gray-600 font-medium">Casiers sans stock</p>
+      </div>
+      <div class="text-center">
+        <p class="text-3xl font-bold text-blue-500">{{ stats.total }}</p>
+        <p class="text-gray-600 font-medium">Casiers total</p>
+      </div>
+    </div>
+
+    <p-dialog
+      header="Casier {{ activeLocker }}"
+      [(visible)]="lockerDetailsDialogVisible"
+      [style]="{ width: '60vw' }">
+      <div *ngIf="activeLocker" class="flex flex-col gap-4 text-sm">
+        <div class="flex justify-between items-center mb-2">
+          <div>
+            <p class="font-semibold">Stocks dans le casier {{ activeLocker }} :</p>
+            <p class="text-xs text-gray-500">Cliquez sur Retirer pour lancer le workflow de scan.</p>
+          </div>
+          <div class="flex gap-2">
+            <button
+              class="font-bold px-3 py-2 rounded-md text-white"
+              [ngClass]="canWithdraw(activeLocker) ? 'bg-blue-500 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+              [disabled]="!canWithdraw(activeLocker)"
+              type="button"
+              (click)="openWithdrawDialog(activeLocker)">
+              Retirer
+            </button>
+          </div>
+        </div>
+
+        <div *ngIf="lockerStocks.length > 0; else noStockInLocker" class="flex flex-wrap gap-3">
+          <div *ngFor="let stock of lockerStocks" class="flex items-center gap-3 border rounded px-3 py-2 bg-gray-50 max-w-xs">
+            <img
+              [src]="stock.product.picture ? stock.product.picture : 'assets/images/default_image.jpg'"
+              alt="product image"
+              class="h-10 w-10 rounded-full object-cover">
+            <div class="text-xs flex-1">
+              <div class="flex flex-wrap gap-1 mb-1">
+                <b class="mr-1">Alitracer(s) :</b>
+                <span *ngFor="let a of getAlitracerList(stock)"
+                      class="bg-gray-100 border border-gray-300 font-mono text-xs px-1.5 py-0.5 rounded">
+                  {{ a }}
+                </span>
+              </div>
+              <div><b>Taille :</b> {{ stock.product.size }}</div>
+              <div><b>CMU :</b> {{ stock.product.cmu }}</div>
+              <div>
+                <b>Dernier contrôle :</b>
+                <span *ngIf="stock.lastCheckDate"> {{ stock.lastCheckDate }}</span>
+                <span *ngIf="!stock.lastCheckDate" class="text-gray-400"> Aucune date</span>
+              </div>
+              <div>
+                <b>Disp. :</b>
+                <span class="font-semibold" [ngClass]="stock.available ? 'text-green-600' : 'text-orange-600'">
+                  {{ stock.available ? 'Disponible' : 'Emprunté' }}
+                </span>
+              </div>
+              <div *ngIf="!stock.available">
+                <b>Emprunté par :</b>
+                <span *ngIf="stock.borrowedBy?.username">{{ stock.borrowedBy.username }}</span>
+                <span *ngIf="!stock.borrowedBy?.username" class="text-gray-400">Inconnu</span>
+              </div>
+              <div>
+                <b>Statut :</b>
+                <span [ngClass]="getStatusClass(stock)">
+                  {{ stock.status === 1 ? 'OK' : stock.status === 0 ? 'NOK' : 'HS' }}
+                </span>
               </div>
             </div>
           </div>
         </div>
-        <!-- if review review is empty -->
-        <div *ngIf="!isStockSelected" class="text-center self-center">
-          <p class="text-lg font-bold">Veuillez scanner ou sélectionner un produit pour afficher ses caractéristiques</p>
-        </div>
 
+        <ng-template #noStockInLocker>
+          <span class="text-gray-400 text-sm italic">Aucun stock dans ce casier</span>
+        </ng-template>
+      </div>
+    </p-dialog>
+
+    <p-dialog
+      [header]="isWallMode ? 'Retrait — Mur' : 'Retrait - Casier ' + activeLocker"
+      [(visible)]="withdrawDialogVisible"
+      [style]="{ width: '30vw' }">
+      <div class="flex flex-col gap-4 p-4 text-sm">
+        <p>Il y a <b>{{ withdrawMax }}</b> stock(s) disponible(s) non HS.</p>
+        <label class="font-semibold">Combien de stocks souhaitez-vous retirer ?</label>
+        <input type="number" class="border border-gray-300 rounded p-2 w-full"
+               [(ngModel)]="withdrawQuantity" [min]="1" [max]="withdrawMax"
+               placeholder="Nombre entre 1 et {{ withdrawMax }}">
+        <p class="text-xs text-gray-500">Vous ne pouvez pas dépasser le nombre de stocks disponibles non HS.</p>
+        <div class="flex justify-end gap-2 mt-2">
+          <button class="bg-gray-300 hover:bg-gray-400 text-gray-800 rounded px-3 py-2" type="button"
+                  (click)="withdrawDialogVisible = false">Annuler</button>
+          <button class="bg-blue-500 hover:bg-blue-700 text-white rounded px-3 py-2" type="button"
+                  (click)="confirmWithdrawQuantity()">Valider</button>
+        </div>
+      </div>
+    </p-dialog>
+
+    <p-dialog
+      header="⚠️ Vérification avant utilisation"
+      [(visible)]="safetyDialogVisible"
+      [modal]="true"
+      [closable]="false"
+      [dismissableMask]="false"
+      [style]="{ width: '42vw', maxWidth: '540px' }"
+      [baseZIndex]="11000">
+      <div class="flex flex-col gap-4 p-2">
+        <div class="bg-orange-50 border border-orange-300 rounded-xl p-4 flex gap-3">
+          <span class="text-2xl flex-shrink-0">🔍</span>
+          <div class="text-sm text-orange-900">
+            <p class="font-bold text-base mb-2">Assurez-vous de l'état de l'outil avant utilisation</p>
+            <p class="mb-2">
+              Avant de retirer un outil, vérifiez visuellement qu'il est en bon état
+              (pas de fissure, de corrosion ou de déformation).
+            </p>
+            <p>
+              Si l'outil ne vous semble pas conforme, <span class="font-semibold">ne l'utilisez pas</span>
+              et signalez-le via la page
+              <span class="font-bold text-orange-700">Contrôles</span>
+              pour qu'il soit inspecté.
+            </p>
+          </div>
+        </div>
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs text-gray-500">
+          En confirmant, vous attestez avoir pris connaissance de ce message et vous engagez
+          à ne pas utiliser un outil dont l'état vous semblerait douteux.
+        </div>
+        <button
+          type="button"
+          (click)="confirmSafety()"
+          class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition text-sm">
+          J'ai vérifié l'état de l'outil — Continuer
+        </button>
+      </div>
+    </p-dialog>
+
+    <p-dialog
+      header="Sécurité casier"
+      [(visible)]="lockerCloseDialogVisible"
+      [modal]="true"
+      [closable]="false"
+      [style]="{ width: '40vw', minWidth: '380px' }"
+      [baseZIndex]="11000"
+      [dismissableMask]="false">
+      <div class="bg-red-100 border-2 border-red-400 text-red-900 rounded-xl p-6">
+        <p class="font-extrabold text-2xl mb-4 text-center">⚠️ Casier {{ activeLocker }}</p>
+        <ol class="list-decimal list-inside space-y-2 text-lg font-bold mb-5">
+          <li *ngIf="lockedFlow === 'withdraw'">Retirez physiquement l'outil du casier</li>
+          <li *ngIf="lockedFlow === 'deposit'">Déposez physiquement l'outil dans le casier</li>
+          <li>Fermez physiquement le casier</li>
+        </ol>
+        <p class="mb-5 text-sm font-semibold text-red-700 text-center">
+          Cliquez sur « Oui, fermer le casier » uniquement une fois ces étapes réalisées.
+        </p>
+        <div class="flex justify-center">
+          <button class="bg-red-600 hover:bg-red-800 text-white font-bold text-lg px-8 py-3 rounded-xl transition"
+                  (click)="confirmLockerClosed()">
+            Oui, fermer le casier
+          </button>
+        </div>
+      </div>
+    </p-dialog>
+
+    <div *ngIf="scanDialogVisible" class="fixed inset-0 bg-black/80 z-50 flex flex-col">
+      <div class="p-4 text-base text-gray-100 bg-black/60">
+        <span *ngIf="scanMode === 'withdraw'">
+          ⚡ Scannez avec la douchette les ID Alitracer des stocks retirés.
+        </span>
+        <span *ngIf="scanMode === 'deposit'">
+          ⚡ Scannez avec la douchette les ID Alitracer des stocks à déposer.
+        </span>
+      </div>
+      <div class="flex-1 flex items-center justify-center p-8">
+        <div class="bg-gray-900 rounded-2xl shadow-2xl border-4 border-yellow-400 p-10 text-center w-full max-w-sm">
+          <i class="pi pi-spin pi-spinner text-white mb-4" style="font-size: 3rem"></i>
+          <p class="text-yellow-300 text-3xl font-extrabold mb-3 leading-tight">
+            Veuillez scanner {{ targetScanCount }} article{{ targetScanCount > 1 ? 's' : '' }}
+          </p>
+          <p class="text-white text-lg font-semibold mb-1">{{ scannedCount }} / {{ targetScanCount }} scanné(s)</p>
+          <p class="text-gray-400 text-sm mb-6">En attente du scan douchette...</p>
+
+          <div class="border-t border-gray-600 pt-5 mt-2">
+            <p class="text-gray-300 text-xs mb-2 font-medium">
+              Ou saisissez les <span class="text-yellow-300 font-bold">4 derniers chiffres</span> de l'ID Alitracer
+            </p>
+            <p class="text-gray-500 text-xs mb-3 italic">L0000000<span class="text-yellow-300 font-bold">XXXX</span></p>
+            <div class="flex gap-2">
+              <input
+                type="text"
+                maxlength="4"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                class="flex-1 bg-gray-800 border border-gray-600 text-white text-center text-xl font-mono rounded-lg px-3 py-2 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 placeholder-gray-600"
+                placeholder="0000"
+                [(ngModel)]="manualSuffix"
+                (keydown.enter)="submitManualScan()"
+                [disabled]="isProcessing">
+              <button
+                type="button"
+                (click)="submitManualScan()"
+                [disabled]="isProcessing || manualSuffix.length !== 4"
+                class="bg-yellow-500 hover:bg-yellow-400 disabled:bg-gray-600 text-black font-bold px-4 rounded-lg transition">
+                ↵
+              </button>
+            </div>
+            <p *ngIf="manualScanError" class="text-red-400 text-xs mt-2">{{ manualScanError }}</p>
+          </div>
+        </div>
       </div>
     </div>
+
+    <p-toast></p-toast>
   </div>
-
-
-
-  <p-toast></p-toast>
 </div>

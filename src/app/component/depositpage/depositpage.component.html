@@ -1,0 +1,279 @@
+<div class="flex flex-col gap-6 p-6 sm:p-8 md:p-10">
+  <div *ngIf="!isLoggedIn()" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+    <p class="font-bold">Accès aux dépôts interdit</p>
+    <p>Vous devez être connecté avec votre badge pour effectuer un dépôt.</p>
+  </div>
+
+  <div *ngIf="isLoggedIn()">
+    <h1 class="text-2xl font-bold py-3 flex items-center gap-3">
+      <fa-icon [icon]="faBoxOpen"></fa-icon>
+      Dépôt d'outils
+    </h1>
+    <h2 class="text-xl mb-4">
+      Scannez tous les outils que vous souhaitez déposer, puis validez.
+    </h2>
+
+    <div class="bg-white rounded-3xl shadow-xl p-6">
+      <button
+        class="bg-green-600 hover:bg-green-800 text-white px-8 py-4 rounded-xl font-bold text-lg w-full"
+        type="button"
+        (click)="startDepositScan()">
+        <fa-icon [icon]="faBarcode"></fa-icon> Déposer des articles
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ZONE DE SCAN PLEIN ÉCRAN -->
+<div *ngIf="scanDialogVisible" class="fixed inset-0 bg-black/80 z-50 flex flex-col">
+
+  <!-- Header -->
+  <div class="p-5 text-lg text-gray-100 bg-black/60">
+    <p class="font-bold mb-1">📦 Veuillez scanner les outils que vous souhaitez déposer</p>
+    <p class="text-sm text-yellow-300 font-semibold mb-1">
+      ✅ Une fois tous les outils scannés, cliquez sur "Finir le scan" pour continuer.
+    </p>
+    <p class="text-sm text-gray-300">{{ scannedTools.length }} outil(s) scanné(s)</p>
+  </div>
+
+  <!-- Contenu centré -->
+  <div class="flex-1 flex flex-col items-center justify-center p-6 gap-6 overflow-y-auto">
+
+    <!-- Carte centrale : attente + saisie manuelle + bouton Finir -->
+    <div class="bg-gray-900 rounded-2xl shadow-2xl border-4 border-yellow-400 p-8 text-center w-full max-w-xl">
+      <i class="pi pi-spin pi-spinner text-white mb-4" style="font-size: 3rem"></i>
+      <p class="text-yellow-300 text-3xl font-extrabold mb-3 leading-tight">
+        Veuillez scanner vos outils à déposer
+      </p>
+      <p class="text-white text-lg font-semibold mb-1">{{ scannedTools.length }} outil(s) scanné(s)</p>
+      <p class="text-gray-400 text-sm mb-6">En attente du scan douchette...</p>
+
+      <div class="border-t border-gray-600 pt-5 mt-2">
+        <p class="text-gray-300 text-xs mb-2 font-medium">
+          Ou saisissez les <span class="text-yellow-300 font-bold">4 derniers chiffres</span> de l'ID Alitracer
+        </p>
+        <p class="text-gray-500 text-xs mb-3 italic">
+          L000000<span class="text-yellow-300 font-bold">XXXX</span>
+        </p>
+
+        <div class="flex gap-2">
+          <input
+            type="text"
+            maxlength="4"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            class="flex-1 bg-gray-800 border border-gray-600 text-white text-center text-xl font-mono rounded-lg px-3 py-2 focus:outline-none focus:border-yellow-400 focus:ring-1 focus:ring-yellow-400 placeholder-gray-600"
+            placeholder="0000"
+            [(ngModel)]="manualSuffix"
+            (keydown.enter)="submitManualScan()"
+            [disabled]="isProcessing">
+          <button
+            type="button"
+            (click)="submitManualScan()"
+            [disabled]="isProcessing || manualSuffix.length !== 4"
+            class="bg-yellow-500 hover:bg-yellow-400 disabled:bg-gray-600 text-black font-bold px-4 rounded-lg transition">
+            ↵
+          </button>
+        </div>
+
+        <p *ngIf="manualScanError" class="text-red-400 text-xs mt-2">{{ manualScanError }}</p>
+      </div>
+
+      <!-- Bouton FINIR au milieu -->
+      <button
+        class="mt-6 bg-red-500 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg flex items-center justify-center gap-2 mx-auto"
+        type="button"
+        (click)="stopDepositScan()">
+        <fa-icon [icon]="faStop"></fa-icon> Finir le scan
+      </button>
+    </div>
+
+    <!-- Outils scannés -->
+    <div class="bg-black/60 rounded-2xl p-6 w-full max-w-2xl text-center">
+      <p class="text-gray-200 font-semibold mb-4 text-lg">
+        Outils scannés
+        <span *ngIf="scannedTools.length > 0" class="ml-2 text-yellow-300 font-bold text-base">
+          ({{ scannedTools.length }})
+        </span>
+      </p>
+
+      <div class="flex flex-col gap-3 max-h-72 overflow-y-auto">
+        <div
+          *ngFor="let tool of scannedTools; let i = index"
+          class="bg-green-600 text-white px-5 py-3 rounded-xl font-mono text-sm font-bold flex flex-wrap items-center gap-3 shadow text-left">
+
+          <span class="text-yellow-300 font-bold text-base">#{{ i + 1 }}</span>
+
+          <span class="font-semibold">{{ tool.alitracer }}</span>
+
+          <span class="text-green-100 text-xs">
+            ({{ tool.product?.size || 'N/A' }} — {{ tool.product?.cmu || 'N/A' }})
+          </span>
+
+          <span class="ml-auto text-xs bg-black/30 px-2 py-1 rounded">
+            {{ tool.lockerNumber ? ('Casier ' + tool.lockerNumber) : 'Hors casier' }}
+          </span>
+
+          <span
+            class="text-xs px-2 py-1 rounded font-bold"
+            [ngClass]="{
+              'bg-blue-500': tool.status === 1,
+              'bg-orange-500': tool.status === 0,
+              'bg-red-600': tool.status === 2
+            }">
+            {{ getStatusLabelFromStock(tool) }}
+          </span>
+        </div>
+
+        <div *ngIf="scannedTools.length === 0" class="text-gray-400 text-sm italic text-center py-4">
+          Aucun outil scanné pour le moment
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Dialog : CONTRÔLE DU PRODUIT -->
+<p-dialog
+  header="Contrôle du produit"
+  [(visible)]="checkDialogVisible"
+  [modal]="true"
+  [closable]="false"
+  [dismissableMask]="false"
+  [style]="{ width: '45vw', maxWidth: '600px' }"
+  [baseZIndex]="10000">
+
+  <ng-container *ngIf="selectedStockForCheck">
+    <div class="flex flex-col md:flex-row md:items-start gap-6 mb-6">
+      <img
+        class="h-32 w-32 object-cover rounded"
+        [src]="selectedStockForCheck?.product?.picture || 'assets/images/default_image.jpg'"
+        alt="Product Image">
+
+      <div class="flex-1 text-sm">
+        <p class="text-lg font-bold mb-1">
+          {{ selectedStockForCheck?.product?.title || 'Produit inconnu' }}
+        </p>
+        <p class="text-gray-600 mb-2">
+          ID Alitracer : {{ selectedStockForCheck?.alitracer }}
+          • Casier {{ selectedStockForCheck?.lockerNumber || 'N/A' }}
+        </p>
+
+        <div class="grid grid-cols-2 gap-x-6 mt-2">
+          <div>
+            <div class="text-gray-500">Type</div>
+            <div class="text-black">
+              {{ selectedStockForCheck?.product?.type || 'N/A' }}
+            </div>
+            <div class="text-gray-500 mt-2">Marque</div>
+            <div class="text-black">
+              {{ selectedStockForCheck?.product?.brand || 'N/A' }}
+            </div>
+          </div>
+          <div>
+            <div class="text-gray-500">Taille</div>
+            <div class="text-black">
+              {{ selectedStockForCheck?.product?.size || 'N/A' }}
+            </div>
+            <div class="text-gray-500 mt-2">CMU</div>
+            <div class="text-black">
+              {{ selectedStockForCheck?.product?.cmu || 'N/A' }}
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="text-gray-500">Statut actuel</div>
+          <div [ngClass]="getStatusClassFromStock(selectedStockForCheck)">
+            {{ getStatusLabelFromStock(selectedStockForCheck) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mb-4 text-sm">
+      <label class="block text-gray-700 font-bold mb-2">Commentaire (optionnel)</label>
+      <textarea
+        class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md"
+        [(ngModel)]="checkComment"
+        rows="3"
+        placeholder="Analyse visuelle du produit">
+      </textarea>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+      <button
+        class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded text-lg"
+        type="button"
+        (click)="confirmCheck(1)">
+        OK
+      </button>
+      <button
+        class="bg-orange-500 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded text-lg"
+        type="button"
+        (click)="confirmCheck(0)">
+        NOK
+      </button>
+      <button
+        class="bg-red-500 hover:bg-red-700 text-white font-bold py-3 px-4 rounded text-lg"
+        type="button"
+        (click)="confirmCheck(2)">
+        HS
+      </button>
+    </div>
+  </ng-container>
+</p-dialog>
+
+<!-- Dialog : Rangement par casier -->
+<p-dialog
+  header="Rangement - Casier {{ currentLocker }}"
+  [(visible)]="lockerDialogVisible"
+  [modal]="true"
+  [closable]="false"
+  [style]="{ width: '50vw' }"
+  [baseZIndex]="11000"
+  [dismissableMask]="false">
+
+  <div class="flex flex-col gap-4 p-4">
+    <div class="bg-blue-50 border border-blue-200 rounded p-4">
+      <p class="font-bold text-lg mb-2">
+        Veuillez ranger les outils suivants dans le casier {{ currentLocker }} :
+      </p>
+      <ul class="list-disc list-inside space-y-1 text-sm">
+        <li *ngFor="let tool of currentLockerTools" class="font-mono">
+          {{ tool.alitracer }}
+          ({{ tool.product?.size || 'N/A' }} - {{ tool.product?.cmu || 'N/A' }})
+          <span class="ml-2 text-xs"
+                [ngClass]="{
+                  'text-blue-700': tool.status === 1,
+                  'text-orange-700': tool.status === 0,
+                  'text-red-700': tool.status === 2
+                }">
+            [{{ getStatusLabelFromStock(tool) }}]
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="bg-red-100 border-2 border-red-400 text-red-900 rounded-xl p-6">
+      <p class="font-extrabold text-2xl mb-4 text-center">⚠️ Casier {{ currentLocker }}</p>
+      <ol class="list-decimal list-inside space-y-2 text-lg font-bold mb-5">
+        <li>Déposez physiquement les outils dans le casier</li>
+        <li>Fermez physiquement le casier</li>
+      </ol>
+      <p class="mb-5 text-sm font-semibold text-red-700 text-center">
+        Cliquez sur « Oui, fermer le casier » uniquement une fois ces étapes réalisées.
+      </p>
+      <div class="flex justify-center">
+        <button
+          class="bg-red-600 hover:bg-red-800 text-white font-bold text-lg px-8 py-3 rounded-xl transition"
+          type="button"
+          (click)="closeCurrentLocker()">
+          <fa-icon [icon]="faDoorClosed"></fa-icon> Oui, fermer le casier
+        </button>
+      </div>
+    </div>
+  </div>
+</p-dialog>
+
+<p-toast></p-toast>
