@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import {HttpClient} from "@angular/common/http";
-import {forkJoin} from "rxjs";
+import { HttpClient } from '@angular/common/http';
+import { forkJoin, Observable, of } from 'rxjs';
+import { map, tap } from 'rxjs/operators';
 
 @Injectable({
   providedIn: 'root'
@@ -8,88 +9,136 @@ import {forkJoin} from "rxjs";
 export class UserService {
 
   private userArray: any[] = [];
+
   constructor(private httpClient: HttpClient) {
     this.refreshUsers();
   }
 
-  updateUserInfo(userId: number, userInfo: string) {
-    this.userArray = this.userArray.map(user => {
-      if (user.id === userId) {
-        user.info = userInfo;
-        this.refreshUser(user);
+  // ── Rafraîchir l'info d'un utilisateur ─────────────────────────────────────
+
+  /**
+   * Charge les infos d'un user (api/users/info/{id}) et les applique à l'objet.
+   * Retourne un Observable pour pouvoir être utilisé dans forkJoin.
+   */
+  refreshUser(user: any): Observable<any> {
+    return this.httpClient
+      .get(`api/users/info/${user.id}`, { responseType: 'text' })
+      .pipe(
+        tap((info: string) => {
+          const parts = info.split('|');
+          // Traduction du type d'opération en français
+          if (parts[0]) {
+            parts[0] = parts[0].replace('deposit', 'Dépôt')
+              .replace('withdraw', 'Retrait')
+              .replace('check', 'Contrôle');
+          }
+          user.info = parts;
+        })
+      );
+  }
+
+  /**
+   * Charge tous les users puis, pour chacun, appelle refreshUser.
+   */
+  refreshUsers(): void {
+    this.httpClient.get<any[]>('api/users').subscribe(users => {
+      this.userArray = users || [];
+
+      if (this.userArray.length === 0) {
+        return;
       }
-      return user;
-    });
-
-    // Apply the same refreshUsers logic for the user info
-
-  }
-
-  refreshUser(user: any) {
-    this.httpClient.get(`api/users/info/${user.id}`, { responseType: 'text' }).subscribe((info: any) => {
-      user.info = info.split('|');
-      user.info[0] = user.info[0].replace('deposit', 'Dépôt');
-      user.info[0] = user.info[0].replace('withdraw', 'Retrait');
-      user.info[0] = user.info[0].replace('check', 'Contrôle');
-    });
-  }
-
-  refreshUsers() {
-    this.httpClient.get('api/users').subscribe((users: any) => {
-      this.userArray = users;
 
       const requests = this.userArray.map(user => this.refreshUser(user));
 
-      forkJoin(requests).subscribe(() => {
-        // All users have been refreshed
+      forkJoin(requests).subscribe({
+        next: () => {
+          // Tous les users ont été rafraîchis
+        },
+        error: err => {
+          console.error('Erreur lors du rafraîchissement des infos users :', err);
+        }
       });
     });
   }
 
-  getAllUsers() {
+  getAllUsers(): any[] {
     return this.userArray;
   }
 
-  addUser(userSent: any) {
+  // ── Mise à jour d'une info utilisateur en local + back ────────────────────
 
-    let user = {
+  /**
+   * Met à jour l'info d'un user dans le tableau local et renvoie l'objet mis à jour.
+   * (Si tu veux que ça aille aussi au back, passe par updateUser.)
+   */
+  updateUserInfo(userId: number, userInfo: string): void {
+    this.userArray = this.userArray.map(user => {
+      if (user.id === userId) {
+        user.info = userInfo;
+      }
+      return user;
+    });
+  }
+
+  // ── CRUD utilisateur ───────────────────────────────────────────────────────
+
+  addUser(userSent: any): void {
+    const user = {
       username: userSent.username,
       password: userSent.password,
       token: userSent.token,
       role: userSent.role
-    }
+    };
 
     this.httpClient.post('api/users', user).subscribe(() => {
       this.refreshUsers();
     });
   }
 
-  updateUser(userSent: any){
-    let user = {
+  updateUser(userSent: any): void {
+    const user = {
       id: userSent.id,
       username: userSent.username,
       password: userSent.password,
       token: userSent.token,
-      role: userSent.role,
+      role: userSent.role
     };
+
     this.httpClient.post('api/users', user).subscribe((userReceived: any) => {
-      this.userArray = this.userArray.map(p => {
-        if(p.id === userReceived.id){
-          return userReceived;
-        }
-        return p;
-      });
+      // Mise à jour dans le cache
+      this.userArray = this.userArray.map(u =>
+        u.id === userReceived.id ? userReceived : u
+      );
 
-      this.updateUserInfo(userReceived.id, userReceived.info);
+      // Recharger ses infos d'activité
+      const updated = this.userArray.find(u => u.id === userReceived.id);
+      if (updated) {
+        this.refreshUser(updated).subscribe();
+      }
     });
-
   }
 
-  removeUser(id: number){
+  removeUser(id: number): void {
     this.userArray = this.userArray.filter(user => user.id !== id);
     this.httpClient.delete('api/users/' + id).subscribe(() => {
       this.refreshUsers();
     });
+  }
 
+  // ── Recherche par badge ────────────────────────────────────────────────────
+
+  getUserByBadge(badgeToken: string): Observable<any | null> {
+    // Si le cache est vide, on recharge puis on filtre
+    if (!this.userArray || this.userArray.length === 0) {
+      return this.httpClient.get<any[]>('api/users').pipe(
+        map(users => {
+          this.userArray = users || [];
+          return this.userArray.find(u => u.token === badgeToken) ?? null;
+        })
+      );
+    }
+
+    const user = this.userArray.find(u => u.token === badgeToken) ?? null;
+    return of(user);
   }
 }

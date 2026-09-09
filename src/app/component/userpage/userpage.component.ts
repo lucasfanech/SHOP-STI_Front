@@ -10,6 +10,7 @@ import {ToastModule} from "primeng/toast";
 import {MessageService} from "primeng/api";
 import {faKey, faPeopleGroup, faUser} from "@fortawesome/free-solid-svg-icons";
 import {FaIconComponent} from "@fortawesome/angular-fontawesome";
+import { AuthAppService } from '../../services/auth-app.service';
 
 @Component({
   selector: 'app-userpage',
@@ -49,7 +50,7 @@ export class UserpageComponent implements OnInit{
 
   responsiveOptions: any[] | undefined;
 
-  constructor(protected userService: UserService, private messageService: MessageService) {}
+  constructor(protected userService: UserService, private messageService: MessageService, private authApp: AuthAppService) {}
 
   ngOnInit(){
     this.responsiveOptions = [
@@ -73,8 +74,24 @@ export class UserpageComponent implements OnInit{
     this.userService.refreshUsers();
   }
 
+  isLoggedIn(): boolean {
+    return this.authApp.isLoggedIn();
+  }
+
+  isAdmin(): boolean {
+    return this.authApp.isAdmin();
+  }
+
+  isMaintenance(): boolean {
+    return this.authApp.isMaintenance();
+  }
+
+  isOperator(): boolean {
+    return this.authApp.isOperator();
+  }
+
   addUser() {
-    if(this.user.username.trim().length === 0 || this.user.password.trim().length === 0 || this.user.token.trim().length === 0 || this.user.role.trim().length === 0){
+    if(this.user.username.trim().length === 0 || this.user.token.trim().length === 0 || this.user.role.trim().length === 0){
       this.showMissingFieldsToast();
       return;
     }
@@ -84,7 +101,6 @@ export class UserpageComponent implements OnInit{
     // reset the user
     this.user = {
       username: '',
-      password: '',
       token: '',
       role: '',
     }

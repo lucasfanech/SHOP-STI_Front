@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import {HttpClient} from "@angular/common/http";
-import {firstValueFrom} from "rxjs";
+import {firstValueFrom, Observable} from "rxjs";
 
 @Injectable({
   providedIn: 'root'
@@ -78,11 +78,11 @@ export class CheckService {
   }
 
 
-  async createCheck(check: any){
+  createCheck(check: any): Promise<any> {
     console.log(check);
-    this.httpClient.post('api/checks', check).subscribe(() => {
-    })
+    return this.httpClient.post('api/checks', check).toPromise(); // ou firstValueFrom
   }
+
 
   async getChecks() {
     this.checksArray = await firstValueFrom(this.httpClient.get<any>('api/checks'));
@@ -95,6 +95,10 @@ export class CheckService {
       return {};
     }
     return this.checksArray[this.checksArray.length - 1];
+  }
+
+  getCheckByStockId(id: number) {
+    return this.httpClient.get('api/checks/getCheckByStockId/' + id).toPromise();
   }
 
 }

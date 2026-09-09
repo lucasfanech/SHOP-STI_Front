@@ -1,21 +1,26 @@
-import {Component, OnInit} from '@angular/core';
-import {Router, RouterModule} from "@angular/router";
-import {KeycloakProfile} from "keycloak-js";
-import {KeycloakService} from "keycloak-angular";
-import {DatePipe, NgClass, NgIf} from "@angular/common";
-import {MessageService} from "primeng/api";
-import {ToastModule} from "primeng/toast";
+import { Component, OnInit } from '@angular/core';
+import { Router, RouterModule } from '@angular/router';
+import { DatePipe, NgClass, NgIf } from '@angular/common';
+import { MessageService } from 'primeng/api';
+import { ToastModule } from 'primeng/toast';
+import { HttpClient } from '@angular/common/http';
 import {
   faBarcode,
   faBox,
   faBoxesStacked,
   faClockRotateLeft,
   faListCheck,
-  faPeopleGroup
-} from "@fortawesome/free-solid-svg-icons";
-import {FaIconComponent} from "@fortawesome/angular-fontawesome";
-import {StockService} from "../../services/stock.service";
-import {CheckService} from "../../services/check.service";
+  faPeopleGroup,
+  faList,
+  faDoorOpen,
+  faFilePdf,
+  faArrowRightFromBracket,
+  faArrowRightToBracket
+} from '@fortawesome/free-solid-svg-icons';
+import { FaIconComponent } from '@fortawesome/angular-fontawesome';
+import { StockService } from '../../services/stock.service';
+import { CheckService } from '../../services/check.service';
+import { AuthAppService } from '../../services/auth-app.service';
 
 @Component({
   selector: 'app-racine-page',
@@ -23,29 +28,108 @@ import {CheckService} from "../../services/check.service";
   imports: [RouterModule, NgClass, ToastModule, FaIconComponent, DatePipe, NgIf],
   templateUrl: './racine-page.component.html',
   providers: [MessageService],
-  styleUrl: './racine-page.component.css'
+  styleUrls: ['./racine-page.component.css']
 })
 export class RacinePageComponent implements OnInit {
-  userProfile: KeycloakProfile | undefined;
-  nbStocksOK: number = 0;
-  nbStocksNOK: number = 0;
-  nbStocksHS: number = 0;
+
+  nbStocksOK = 0;
+  nbStocksNOK = 0;
+  nbStocksHS = 0;
+
   lastCheck: any = {
     date: null,
     status: null,
+    pdfFilename: null
   };
-  constructor(private keycloakService: KeycloakService, private messageService: MessageService, private stockService: StockService,  private checkService: CheckService, private router: Router) {}
 
-  async ngOnInit(): Promise<void>{
-    if (this.isLoggedIn()) {
-      this.loadUserProfile();
-    }
+  /** État du téléchargement PDF */
+  isDownloading = false;
 
+  constructor(
+    private messageService: MessageService,
+    private stockService: StockService,
+    private checkService: CheckService,
+    private router: Router,
+    private authApp: AuthAppService,
+    private httpClient: HttpClient
+  ) {}
+
+  async ngOnInit(): Promise<void> {
     await this.stockService.refreshStocks();
     this.updateStockCounts();
 
     await this.checkService.getChecks();
-    this.lastCheck = this.checkService.getLastCheck();
+    this.loadLastCheck();
+  }
+
+  /**
+   * Charger le dernier contrôle depuis l'API
+   */
+  loadLastCheck(): void {
+    this.httpClient.get<any>('api/checks/last').subscribe({
+      next: (response) => {
+        this.lastCheck = response;
+        console.log('Dernier contrôle chargé:', this.lastCheck);
+      },
+      error: (error) => {
+        console.error('Erreur chargement dernier contrôle:', error);
+        // Fallback sur l'ancien système si l'API ne répond pas
+        this.lastCheck = this.checkService.getLastCheck();
+      }
+    });
+  }
+
+  /**
+   * Télécharger le dernier PDF
+   */
+  downloadLastPdf(): void {
+    if (!this.lastCheck.pdfFilename) {
+      this.messageService.add({
+        severity: 'warn',
+        summary: 'PDF non disponible',
+        detail: 'Aucun PDF associé à ce contrôle'
+      });
+      return;
+    }
+
+    this.isDownloading = true;
+
+    // Télécharger le PDF depuis le backend
+    this.httpClient.get(`api/pdf/download/${this.lastCheck.pdfFilename}`, {
+      responseType: 'blob'
+    }).subscribe({
+      next: (blob: Blob) => {
+        // Créer un lien de téléchargement
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = this.lastCheck.pdfFilename;
+        link.click();
+
+        // Nettoyer
+        window.URL.revokeObjectURL(url);
+
+        this.isDownloading = false;
+
+        this.messageService.add({
+          severity: 'success',
+          summary: '✅ PDF téléchargé',
+          detail: this.lastCheck.pdfFilename
+        });
+
+        console.log('✅ PDF téléchargé:', this.lastCheck.pdfFilename);
+      },
+      error: (error) => {
+        console.error('❌ Erreur téléchargement PDF:', error);
+        this.isDownloading = false;
+
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Erreur téléchargement',
+          detail: 'Impossible de télécharger le PDF'
+        });
+      }
+    });
   }
 
   updateStockCounts() {
@@ -64,27 +148,23 @@ export class RacinePageComponent implements OnInit {
   }
 
   isLoggedIn(): boolean {
-    return this.keycloakService.isLoggedIn();
-  }
-
-  loadUserProfile() {
-    this.keycloakService.loadUserProfile().then(profile => {
-      this.userProfile = profile;
-    }).catch(error => {
-      console.error('Error loading user profile', error);
-    });
+    return this.authApp.isLoggedIn();
   }
 
   isAdmin(): boolean {
-    return this.keycloakService.isUserInRole('admin');
+    return this.authApp.isAdmin();
+  }
+
+  isMaintenance(): boolean {
+    return this.authApp.isMaintenance();
+  }
+
+  isOperator(): boolean {
+    return this.authApp.isOperator();
   }
 
   getUsername(): string {
-    if (this.userProfile) {
-      return <string>this.userProfile.username;
-    } else {
-      return '';
-    }
+    return this.authApp.getUsername();
   }
 
   navigateOrShowToast(route: string, hasPermission: boolean) {
@@ -95,15 +175,23 @@ export class RacinePageComponent implements OnInit {
     }
   }
 
-  showErrorRoleToast(){
-    console.log('Vous devez avoir un rôle admin pour accéder à cette page');
-    this.messageService.add({ severity: 'error', summary: 'Accès non autorisé', detail: 'Vous devez avoir un rôle admin pour accéder à cette page' });
+  showErrorRoleToast() {
+    this.messageService.add({
+      severity: 'error',
+      summary: 'Accès non autorisé',
+      detail: 'Vous devez être connecté ou avoir les droits nécessaires pour accéder à cette page'
+    });
   }
 
-    protected readonly faBarcode = faBarcode;
+  protected readonly faBarcode = faBarcode;
   protected readonly faListCheck = faListCheck;
   protected readonly faClockRotateLeft = faClockRotateLeft;
   protected readonly faBox = faBox;
   protected readonly faBoxesStacked = faBoxesStacked;
   protected readonly faPeopleGroup = faPeopleGroup;
+  protected readonly faList = faList;
+  protected readonly faDoorOpen = faDoorOpen;
+  protected readonly faFilePdf = faFilePdf;
+  protected readonly faArrowRightFromBracket = faArrowRightFromBracket;
+  protected readonly faArrowRightToBracket = faArrowRightToBracket;
 }

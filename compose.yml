@@ -1,26 +1,13 @@
 name: optibox-frontend
 
 services:
-  keycloak:
-    image: keycloak/keycloak:latest
-    container_name: optibox-keycloak
-    environment:
-      KEYCLOAK_ADMIN: "${KEYCLOAK_USERNAME}"
-      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_PASSWORD}"
-    ports:
-      - "${KEYCLOAK_PORT}:8080"
-    volumes:
-      - ./moyens-levage-realm.json:/opt/keycloak/data/import/moyens-levage-realm.json
-    command: [ "start-dev", "--import-realm" ]
-
   angular-app:
     build: .
     container_name: angular-app
-    depends_on:
-      keycloak:
-        condition: service_started
     ports:
       - "${ANGULAR_PORT}:4200"
+    volumes:
+      - /var/www/OPtiBox/SHOP-STI_Front/certs:/certs:ro
     networks:
       - optibox-shared-network
 
