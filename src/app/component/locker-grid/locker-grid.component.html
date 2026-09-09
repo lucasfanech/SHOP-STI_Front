@@ -1,0 +1,16 @@
+<div class="flex gap-3 justify-center overflow-x-auto py-4">
+  <div *ngFor="let col of columns; let i = index"
+       [hidden]="!hasVisible(col)"
+       class="flex flex-col rounded-xl overflow-hidden border border-gray-300 bg-gray-100 shadow-sm">
+    <button *ngFor="let num of col"
+            type="button"
+            [hidden]="!isVisible(num)"
+            [ngClass]="cellHeightClass(i)"
+            class="locker-cell relative block w-24 sm:w-28 flex-1 appearance-none border-0 border-b last:border-b-0 border-gray-300 bg-transparent p-0 m-0 cursor-pointer text-left transition-transform duration-150 hover:z-10 hover:scale-[1.04] focus-visible:z-10 focus-visible:scale-[1.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            (click)="boxClick.emit(num)">
+      <ng-container *ngTemplateOutlet="itemTemplate; context: { $implicit: num }"></ng-container>
+    </button>
+  </div>
+
+  <ng-content></ng-content>
+</div>

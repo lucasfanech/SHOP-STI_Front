@@ -3,6 +3,7 @@ import { LoginpageComponent } from './component/loginpage/loginpage.component';
 import { RacinePageComponent } from './component/racine-page/racine-page.component';
 import { ScanpageComponent } from './component/scanpage/scanpage.component';
 import { CheckpageComponent } from './component/checkpage/checkpage.component';
+import { AtelierpageComponent } from './component/atelierpage/atelierpage.component';
 import { HistorypageComponent } from './component/historypage/historypage.component';
 import { ProcedurePageComponent } from './component/procedurepage/procedurepage.component';
 import { ProductpageComponent } from './component/productpage/productpage.component';
@@ -16,13 +17,14 @@ export const routes: Routes = [
   // Route par défaut → login
   { path: '', redirectTo: '/login', pathMatch: 'full' },
   // Pages publiques (SANS guard)
-  { path: 'racine', component: RacinePageComponent },
+  { path: 'racine', component: RacinePageComponent, canActivate: [AuthGuard] },
   { path: 'login',  component: LoginpageComponent  },
   // Pages protégées (AVEC guard)
   { path: 'scanpage',        component: ScanpageComponent,      canActivate: [AuthGuard] },
   { path: 'deposit',         component: DepositpageComponent,   canActivate: [AuthGuard] },
   { path: 'withdraw-deposit',component: ScanpageComponent,      canActivate: [AuthGuard] },
   { path: 'check',           component: CheckpageComponent,     canActivate: [AuthGuard] },
+  { path: 'atelier',           component: AtelierpageComponent,     canActivate: [AuthGuard] },
   { path: 'history',         component: HistorypageComponent,   canActivate: [AuthGuard] },
   { path: 'procedures',      component: ProcedurePageComponent, canActivate: [AuthGuard] },
   { path: 'product',         component: ProductpageComponent,   canActivate: [AuthGuard] },

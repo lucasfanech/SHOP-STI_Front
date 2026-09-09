@@ -1,18 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { LockerpageComponent } from './lockerpage.component';
+import { AtelierpageComponent } from './atelierpage.component';
 
-describe('LockerpageComponent', () => {
-  let component: LockerpageComponent;
-  let fixture: ComponentFixture<LockerpageComponent>;
+describe('AtelierpageComponent', () => {
+  let component: AtelierpageComponent;
+  let fixture: ComponentFixture<AtelierpageComponent>;
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [LockerpageComponent]
+      imports: [AtelierpageComponent]
     })
     .compileComponents();
     
-    fixture = TestBed.createComponent(LockerpageComponent);
+    fixture = TestBed.createComponent(AtelierpageComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

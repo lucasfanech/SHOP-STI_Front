@@ -8,6 +8,7 @@ import { faDoorOpen, faDoorClosed, faLockOpen, faLock } from '@fortawesome/free-
 
 import { ScanService } from '../../services/scan.service';
 import { AuthAppService } from '../../services/auth-app.service';
+import { LockerGridComponent } from '../locker-grid/locker-grid.component';
 
 interface LockerState {
   number: number;
@@ -20,7 +21,7 @@ interface LockerState {
   standalone: true,
   templateUrl: './lockerpage.component.html',
   styleUrls: ['./lockerpage.component.css'],
-  imports: [NgForOf, NgIf, NgClass, ToastModule, FaIconComponent],
+  imports: [NgForOf, NgIf, NgClass, ToastModule, FaIconComponent, LockerGridComponent],
   providers: [MessageService]
 })
 export class LockerpageComponent implements OnInit {
@@ -63,31 +64,8 @@ export class LockerpageComponent implements OnInit {
   isLoggedIn() { return this.authApp.isLoggedIn(); }
   isAdmin()    { return this.authApp.isAdmin(); }
 
-  // ── Colonnes de la grille (même disposition que scanpage) ─────────────────
-
-  readonly columns: number[][] = [
-    [1, 2, 3],
-    [4, 5],
-    [6, 7, 8],
-    [9, 10],
-    [11, 12, 13, 14, 15],
-    [16, 17, 18],
-    [19, 20, 21],
-    [22, 23, 24]
-  ];
-
   getLocker(num: number): LockerState {
     return this.lockers[num - 1];
-  }
-
-  // ── Hauteur des cellules selon la colonne (identique à scanpage) ──────────
-
-  cellHeight(colIndex: number): string {
-    // Colonnes 2 et 4 (index 1 et 3) → cases plus hautes
-    if (colIndex === 1 || colIndex === 3) return 'h-40 sm:h-44';
-    // Colonne 5 (index 4) → cases plus petites
-    if (colIndex === 4) return 'h-24 sm:h-28';
-    return 'h-32 sm:h-36';
   }
 
   // ── Clic sur un casier : toggle ouvrir / fermer ────────────────────────────

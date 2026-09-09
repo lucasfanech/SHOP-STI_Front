@@ -18,8 +18,11 @@ import { StockService } from '../../services/stock.service';
 import { AuthAppService } from '../../services/auth-app.service';
 import { PdfService, CheckPdfData } from '../../services/pdf.service';
 import { ScanService } from '../../services/scan.service';
+import { ScanSocketService } from '../../services/scan-socket.service';
+import { Subscription } from 'rxjs';
 import { ExcelService } from '../../services/excel.service';
 import { HttpClient } from '@angular/common/http';
+import { LockerGridComponent } from '../locker-grid/locker-grid.component';
 
 interface Product {
   title: string;
@@ -36,6 +39,8 @@ interface Stock {
   id: number;
   alitracer: string;
   lockerNumber: number | null;
+  emplacement: string | null;
+  zone: { id: number; name: string } | null;
   status: number | null;
   lastCheckDate: string | null;
   lastRegulatoryCheckDate: string | null;
@@ -50,6 +55,9 @@ interface LockerStats {
 
 interface LockerInfo {
   hasStock: boolean;
+  needsCheck: boolean;
+  ratio: string;
+  firstStock: { size: string; cmu: string } | null;
 }
 
 interface MonthData {
@@ -73,7 +81,7 @@ interface ProductFilter {
     NgForOf, NgIf, NgClass, DatePipe,
     ReactiveFormsModule, FormsModule,
     ToastModule, DialogModule,
-    FaIconComponent, RouterLink
+    FaIconComponent, RouterLink, LockerGridComponent
   ],
   templateUrl: './checkpage.component.html',
   styleUrls: ['./checkpage.component.css'],
@@ -87,8 +95,12 @@ export class CheckpageComponent implements OnInit, OnDestroy {
   dataReady = false;
 
   productFilters: ProductFilter[] = [];
+  filterCounts: { [title: string]: number } = {};
   activeFilterTitle: string | null = null;
   filteredLockers: number[] = Array.from({ length: 24 }, (_, i) => i + 1);
+
+  /** Regroupement des stocks par casier, reconstruit en un seul passage à chaque changement de données (évite de refiltrer allStocks à chaque cycle de détection de changement Angular). */
+  private lockerStocksCache = new Map<number, Stock[]>();
 
   activeLocker: number | null = null;
   lockerStocks: Stock[] = [];
@@ -96,6 +108,10 @@ export class CheckpageComponent implements OnInit, OnDestroy {
 
   wallDetailsDialogVisible = false;
   wallStocks: Stock[] = [];
+
+  // Choix du type de contrôle réglementaire
+  regulatoryTypeDialogVisible = false;
+  regulatoryOrganization: 'CLASSIC' | 'APAVE' = 'CLASSIC';
 
   selectedStockForCheck: Stock | null = null;
   checkComment = '';
@@ -125,7 +141,8 @@ export class CheckpageComponent implements OnInit, OnDestroy {
   recentActions: { action: string; locker: number; time: Date }[] = [];
   private readonly PLC_POLLING_DELAY = 800;
   private actionTimeout: any;
-  private pollingInterval: any;
+  private scanSubscription?: Subscription;
+  readonly currentYear = new Date().getFullYear();
 
   protected readonly faListCheck = faListCheck;
   protected readonly faFileExcel = faFileExcel;
@@ -144,14 +161,17 @@ export class CheckpageComponent implements OnInit, OnDestroy {
     private authApp: AuthAppService,
     private pdfService: PdfService,
     private scanService: ScanService,
+    private scanSocketService: ScanSocketService,
     private httpClient: HttpClient,
     private excelService: ExcelService
   ) {
-    for (let num = 1; num <= 24; num++) this.lockersMap[num] = { hasStock: false };
+    for (let num = 1; num <= 24; num++) {
+      this.lockersMap[num] = { hasStock: false, needsCheck: false, ratio: '', firstStock: null };
+    }
   }
 
   get stocksWithoutLocker(): Stock[] {
-    return this.allStocks.filter(s => !s.lockerNumber || s.lockerNumber === 0);
+    return this.allStocks.filter(s => s.emplacement === 'Mur');
   }
 
   get totalAvailableStocks(): number {
@@ -160,7 +180,16 @@ export class CheckpageComponent implements OnInit, OnDestroy {
 
   get availableYears(): number[] {
     const current = new Date().getFullYear();
-    return Array.from({ length: 5 }, (_, i) => current - i);
+    // Année courante + toutes les années passées ayant des fichiers
+    const pastYears = [...new Set(
+      this.monthlyExcelFiles
+        .map(f => {
+          const match = f.filename.match(/_(\d{4})\.xlsx$/);
+          return match ? parseInt(match[1]) : null;
+        })
+        .filter((y): y is number => y !== null && y < current)
+    )];
+    return [...new Set([current, ...pastYears])].sort((a, b) => b - a);
   }
 
   get hasPartialRegulatoryControl(): boolean {
@@ -174,9 +203,20 @@ export class CheckpageComponent implements OnInit, OnDestroy {
     return this.hasPartialRegulatoryControl ? 'Finir le Contrôle Réglementaire' : 'Contrôle Réglementaire';
   }
 
-  get isWallFullyCheckedThisMonth(): boolean {
-    return this.stocksWithoutLocker.length > 0
-      && this.stocksWithoutLocker.every(s => this.isStockCheckedRegulatoryThisMonth(s));
+
+
+  get isEverythingFullyCheckedThisMonth(): boolean {
+    // Vérifie tous les casiers (1-24)
+    const allLockersDone = Array.from({ length: 24 }, (_, i) => i + 1).every(num => {
+      const stocks = this.getStocksByLocker(num);
+      return stocks.length === 0 || stocks.every(s => this.isStockCheckedRegulatoryThisMonth(s));
+    });
+
+    // Vérifie le mur
+    const wallStocks = this.stocksWithoutLocker;
+    const wallDone = wallStocks.length === 0 || wallStocks.every(s => this.isStockCheckedRegulatoryThisMonth(s));
+
+    return allLockersDone && wallDone;
   }
 
   async ngOnInit(): Promise<void> {
@@ -209,6 +249,8 @@ export class CheckpageComponent implements OnInit, OnDestroy {
       id: s.id,
       alitracer: s.alitracer,
       lockerNumber: s.lockerNumber ?? null,
+      emplacement: s.emplacement ?? null,
+      zone: s.zone ?? null,
       reference: s.reference,
       status: s.status,
       lastCheckDate: null,
@@ -269,14 +311,46 @@ export class CheckpageComponent implements OnInit, OnDestroy {
     return ct !== 'INDIVIDUAL';
   }
 
+  /**
+   * Reconstruit en un seul passage sur allStocks : le regroupement par casier,
+   * la carte d'état/ratio/aperçu par casier (lockersMap) et les stats globales.
+   * Avant, chaque case de la grille (×24) appelait plusieurs méthodes qui
+   * refiltraient allStocks à chaque cycle de détection de changement Angular
+   * — d'où la latence d'affichage. Maintenant tout est précalculé une seule
+   * fois ici, et le template ne fait que lire lockersMap[num].
+   */
   private buildLockersMapAndStats(): void {
+    this.lockerStocksCache.clear();
+    for (const s of this.allStocks) {
+      if (!s.lockerNumber) continue;
+      const arr = this.lockerStocksCache.get(s.lockerNumber);
+      if (arr) arr.push(s); else this.lockerStocksCache.set(s.lockerNumber, [s]);
+    }
+
     const map: { [lockerNumber: number]: LockerInfo } = {};
     let withStock = 0, empty = 0;
+
     for (let num = 1; num <= 24; num++) {
-      const hasStock = this.getStocksByLocker(num).length > 0;
-      map[num] = { hasStock };
-      if (hasStock) withStock++; else empty++;
+      const stocks = this.lockerStocksCache.get(num) ?? [];
+      const hasStock = stocks.length > 0;
+
+      let needsCheckFlag = false;
+      let ratio = '';
+      let firstStock: LockerInfo['firstStock'] = null;
+
+      if (hasStock) {
+        const done = stocks.filter(s => this.isStockCheckedRegulatoryThisMonth(s)).length;
+        ratio = `${done}/${stocks.length}`;
+        needsCheckFlag = done < stocks.length;
+        firstStock = { size: stocks[0].product.size, cmu: stocks[0].product.cmu };
+        withStock++;
+      } else {
+        empty++;
+      }
+
+      map[num] = { hasStock, needsCheck: needsCheckFlag, ratio, firstStock };
     }
+
     this.lockersMap = map;
     this.stats = { withStock, empty, total: 24 };
     this.setFilter(this.activeFilterTitle);
@@ -310,6 +384,20 @@ export class CheckpageComponent implements OnInit, OnDestroy {
         }
       }
     }
+
+    // lockerStocksCache a déjà été reconstruit par buildLockersMapAndStats() juste avant.
+    // Le Mur compte pour 1 emplacement supplémentaire s'il contient le produit
+    // (sinon un produit uniquement sur le Mur affichait "0 casier(s)").
+    const counts: { [title: string]: number } = {};
+    for (const filter of this.productFilters) {
+      let count = 0;
+      for (let num = 1; num <= 24; num++) {
+        if ((this.lockerStocksCache.get(num) ?? []).some(s => s.product.title === filter.title)) count++;
+      }
+      if (this.stocksWithoutLocker.some(s => s.product.title === filter.title)) count++;
+      counts[filter.title] = count;
+    }
+    this.filterCounts = counts;
   }
 
   setFilter(title: string | null): void {
@@ -318,27 +406,19 @@ export class CheckpageComponent implements OnInit, OnDestroy {
       this.filteredLockers = Array.from({ length: 24 }, (_, i) => i + 1);
       return;
     }
-    this.filteredLockers = [...new Set(
-      this.allStocks
-        .filter(s => s.product.title === title && (s.lockerNumber ?? 0) > 0)
-        .map(s => s.lockerNumber as number)
-    )];
-  }
-
-  getCol(nums: number[]): number[] {
-    return nums.filter(n => this.filteredLockers.includes(n));
+    const result: number[] = [];
+    for (let num = 1; num <= 24; num++) {
+      if ((this.lockerStocksCache.get(num) ?? []).some(s => s.product.title === title)) result.push(num);
+    }
+    this.filteredLockers = result;
   }
 
   getLockerCountByTitle(title: string): number {
-    return new Set(
-      this.allStocks
-        .filter(s => s.product.title === title && (s.lockerNumber ?? 0) > 0)
-        .map(s => s.lockerNumber as number)
-    ).size;
+    return this.filterCounts[title] ?? 0;
   }
 
   getStocksByLocker(lockerNumber: number): Stock[] {
-    return this.allStocks.filter(s => s.lockerNumber === lockerNumber);
+    return this.lockerStocksCache.get(lockerNumber) ?? [];
   }
 
   getWallStocks(): Stock[] {
@@ -347,13 +427,6 @@ export class CheckpageComponent implements OnInit, OnDestroy {
 
   getAlitracerList(stock: Stock): string[] {
     return StockService.getAlitracerList(stock);
-  }
-
-  getLockerCheckRatio(lockerNumber: number): string {
-    const stocks = this.getStocksByLocker(lockerNumber);
-    if (stocks.length === 0) return '';
-    const done = stocks.filter(s => this.isStockCheckedRegulatoryThisMonth(s)).length;
-    return `${done}/${stocks.length}`;
   }
 
   getWallCheckRatio(): string {
@@ -380,13 +453,8 @@ export class CheckpageComponent implements OnInit, OnDestroy {
   }
 
   wallMatchesActiveFilter(): boolean {
-    return true;
-  }
-
-  needsCheck(lockerNumber: number): boolean {
-    const stocks = this.getStocksByLocker(lockerNumber);
-    if (stocks.length === 0) return false;
-    return stocks.some(s => !this.isStockCheckedRegulatoryThisMonth(s));
+    if (!this.activeFilterTitle) return true;
+    return this.stocksWithoutLocker.some(s => s.product.title === this.activeFilterTitle);
   }
 
   isLockerFullyCheckedRegulatoryThisMonth(lockerNumber: number): boolean {
@@ -459,7 +527,7 @@ export class CheckpageComponent implements OnInit, OnDestroy {
   }
 
   getMonthsForYear(year: number): MonthData[] {
-    const MONTHS = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+    const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
     const now = new Date();
     return MONTHS.map((name, index) => {
       const filename = `Controle_${name}_${year}.xlsx`;
@@ -479,7 +547,7 @@ export class CheckpageComponent implements OnInit, OnDestroy {
 
   async downloadCurrentMonthExcel(): Promise<void> {
     const now = new Date();
-    const MONTHS = ['Janvier','Fevrier','Mars','Avril','Mai','Juin','Juillet','Aout','Septembre','Octobre','Novembre','Decembre'];
+    const MONTHS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
     await this.downloadMonthlyExcel(`Controle_${MONTHS[now.getMonth()]}_${now.getFullYear()}.xlsx`);
   }
 
@@ -505,7 +573,7 @@ export class CheckpageComponent implements OnInit, OnDestroy {
         alitracer: stock.alitracer,
         size: stock.product.size,
         cmu: stock.product.cmu,
-        lockerNumber: stock.lockerNumber,
+        location: this.formatStockLocation(stock),
         status,
         comment,
         controlledBy: username,
@@ -514,56 +582,86 @@ export class CheckpageComponent implements OnInit, OnDestroy {
     } catch {}
   }
 
+  /** "Casier X" si l'outil est dans un casier, sinon le nom de la zone atelier. */
+  private formatStockLocation(stock: Stock): string {
+    if (stock.lockerNumber) return `Casier ${stock.lockerNumber}`;
+    return stock.zone?.name || stock.emplacement || 'N/A';
+  }
+
   async startGlobalControl(): Promise<void> {
-    const lockersNeeding = this.getLockersNeedingRegulatoryCheck();
-    if (lockersNeeding.length === 0) {
+    if (this.isEverythingFullyCheckedThisMonth) {
       this.messageService.add({
         severity: 'success',
-        summary: 'Contrôles réglementaires à jour',
-        detail: 'Tous les casiers ont déjà été contrôlés réglementairement ce mois-ci. ✅'
+        summary: 'Tous les contrôles ont été effectués',
+        detail: 'Tous les casiers et le stock mural ont déjà été contrôlés réglementairement ce mois-ci. ✅'
       });
       return;
     }
+
+    // On ouvre d’abord le popup de choix (Classique / Apave)
+    this.regulatoryTypeDialogVisible = true;
+  }
+
+  async confirmRegulatoryType(isApave: boolean): Promise<void> {
+    this.regulatoryTypeDialogVisible = false;
+    this.regulatoryOrganization = isApave ? 'APAVE' : 'CLASSIC';
+
+    // À partir d’ici, c’est exactement ton ancien startGlobalControl (procédure classique)
+    const lockersNeeding = this.getLockersNeedingRegulatoryCheck();
     this.stopPolling();
-    this.lockerOpenProgress = '...';
-    this.messageService.add({
-      severity: 'info',
-      summary: 'Ouverture en cours',
-      detail: `Envoi batch vers ${lockersNeeding.length} casier(s)...`
-    });
-    try {
-      const result = await new Promise<{ requested: number[]; succeeded: number[]; failed: number[] }>(
-        (resolve, reject) => this.scanService.openLockers(lockersNeeding)
-          .subscribe({ next: resolve, error: reject })
-      );
-      this.lockerOpenProgress = '';
-      this.lockersOpenedForControl = result.succeeded;
-      if (result.succeeded.length === 0) {
-        this.showErrorToast("Aucun casier n'a pu être ouvert.");
+
+    if (lockersNeeding.length > 0) {
+      this.lockerOpenProgress = '...';
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Ouverture en cours',
+        detail: `Envoi batch vers ${lockersNeeding.length} casier(s)...`
+      });
+      try {
+        const result = await new Promise<{ requested: number[]; succeeded: number[]; failed: number[] }>(
+          (resolve, reject) => this.scanService.openLockers(lockersNeeding)
+            .subscribe({ next: resolve, error: reject })
+        );
+        this.lockerOpenProgress = '';
+        this.lockersOpenedForControl = result.succeeded;
+        if (result.succeeded.length === 0) {
+          this.showErrorToast("Aucun casier n'a pu être ouvert.");
+          return;
+        }
+        if (result.failed.length > 0) {
+          this.messageService.add({
+            severity: 'warn',
+            summary: 'Ouverture partielle',
+            detail: `${result.succeeded.length}/${lockersNeeding.length} ouvert(s). Ignorés : ${result.failed.join(', ')}.`
+          });
+        } else {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Casiers ouverts',
+            detail: `${result.succeeded.length} casier(s) ouvert(s).`
+          });
+        }
+        result.succeeded.forEach(n => this.addRecentAction('Ouverture réglementaire', n));
+      } catch {
+        this.lockerOpenProgress = '';
+        this.showErrorToast("Erreur lors de l'ouverture des casiers");
         return;
       }
-      if (result.failed.length > 0) {
-        this.messageService.add({
-          severity: 'warn',
-          summary: 'Ouverture partielle',
-          detail: `${result.succeeded.length}/${lockersNeeding.length} ouvert(s). Ignorés : ${result.failed.join(', ')}.`
-        });
-      } else {
-        this.messageService.add({
-          severity: 'success',
-          summary: 'Casiers ouverts',
-          detail: `${result.succeeded.length} casier(s) ouvert(s).`
-        });
-      }
-      result.succeeded.forEach(n => this.addRecentAction('Ouverture réglementaire', n));
-    } catch {
-      this.lockerOpenProgress = '';
-      this.showErrorToast("Erreur lors de l'ouverture des casiers");
-      return;
+    } else {
+      this.lockersOpenedForControl = [];
+      this.messageService.add({
+        severity: 'info',
+        summary: 'Contrôle mural',
+        detail: 'Aucun casier à ouvrir — seuls les stocks du mur sont à contrôler.'
+      });
     }
 
     this.expectedAlitracers = this.allStocks
-      .filter(s => (s.lockerNumber ?? 0) > 0 && this.lockersOpenedForControl.includes(s.lockerNumber as number) && !this.isStockCheckedRegulatoryThisMonth(s))
+      .filter(s =>
+        (s.lockerNumber ?? 0) > 0 &&
+        this.lockersOpenedForControl.includes(s.lockerNumber as number) &&
+        !this.isStockCheckedRegulatoryThisMonth(s)
+      )
       .flatMap(s => StockService.getAlitracerList(s));
 
     this.expectedAlitracers.push(
@@ -622,7 +720,9 @@ export class CheckpageComponent implements OnInit, OnDestroy {
       }
     }
 
-    this.expectedAlitracers = this.allStocks.flatMap(s => StockService.getAlitracerList(s));
+    this.expectedAlitracers = this.allStocks
+      .filter(s => this.isControllableStock(s))
+      .flatMap(s => StockService.getAlitracerList(s));
 
     this.globalControlMode = false;
     this.isTotalControlMode = true;
@@ -630,6 +730,9 @@ export class CheckpageComponent implements OnInit, OnDestroy {
     this.scanDialogVisible = true;
     await new Promise(r => setTimeout(r, this.PLC_POLLING_DELAY));
     this.startPolling();
+  }
+  private isControllableStock(stock: Stock): boolean {
+    return stock.emplacement !== 'Atelier';
   }
 
   async startScanControl(): Promise<void> {
@@ -747,11 +850,9 @@ export class CheckpageComponent implements OnInit, OnDestroy {
   }
 
   private startPolling(): void {
-    this.scanService.clearScan();
-    this.pollingInterval = setInterval(async () => {
+    this.scanSubscription = this.scanSocketService.scan$.subscribe(async response => {
       if (this.isProcessing) return;
       try {
-        const response = await this.scanService.readScan();
         if (response?.success && response?.value) {
           const val = response.value.trim();
           if (val !== '') {
@@ -762,14 +863,12 @@ export class CheckpageComponent implements OnInit, OnDestroy {
       } catch {
         this.isProcessing = false;
       }
-    }, 2000);
+    });
   }
 
   private stopPolling(): void {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-    }
+    this.scanSubscription?.unsubscribe();
+    this.scanSubscription = undefined;
     this.isProcessing = false;
   }
 
@@ -837,6 +936,16 @@ export class CheckpageComponent implements OnInit, OnDestroy {
 
     const checkType = this.pendingCheckType;
     const checkDate = new Date().toISOString();
+
+    // Si c’est un contrôle réglementaire Apave, préremplir le commentaire
+    if (checkType === 'REGULATORY' && this.regulatoryOrganization === 'APAVE') {
+      if (!this.checkComment || this.checkComment.trim().length === 0) {
+        this.checkComment = 'Contrôle Apave';
+      } else if (!this.checkComment.includes('Contrôle Apave')) {
+        this.checkComment = `${this.checkComment} - Contrôle Apave`;
+      }
+    }
+
     const payload: any = {
       id: null, date: checkDate, status,
       comment: this.checkComment || '', checkType,

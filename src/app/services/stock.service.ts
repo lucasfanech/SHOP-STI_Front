@@ -21,30 +21,55 @@ export class StockService {
     return this.stockArray;
   }
 
-  addStock(stockSent: any, lockerNumber: number | null) {
-    const stock = {
+  // ------------ CRÉATION -------------------------------------------------
+
+  addStock(stockSent: any) {
+    const stock: any = {
       product:      stockSent.product,
-      alitracer:    stockSent.alitracer,  // peut être "ALI001" ou "ALI001|ALI002"
+      alitracer:    stockSent.alitracer,
       reference:    stockSent.reference,
       available:    true,
       status:       1,
       creationDate: new Date(),
-      lockerNumber: lockerNumber ?? null
+      emplacement:  stockSent.emplacement ?? null,
+      lockerNumber: stockSent.lockerNumber ?? null
     };
+
+    // Propager la zone (Atelier) si présente
+    if (stockSent.zone) {
+      stock.zone = stockSent.zone;          // { id: X }
+    } else {
+      stock.zone = null;
+    }
+
+    console.log('HTTP CREATE payload vers /stocks :', JSON.stringify(stock));
+
     this.httpClient.post('api/stocks', stock).subscribe(() => {
       this.refreshStocks();
     });
   }
 
+  // ------------ MISE À JOUR ----------------------------------------------
+
   updateStock(stockSent: any) {
-    const stock = {
+    const stock: any = {
       id:           stockSent.id,
       available:    stockSent.available,
       status:       stockSent.status,
       alitracer:    stockSent.alitracer,
       reference:    stockSent.reference,
-      lockerNumber: stockSent.lockerNumber
+      emplacement:  stockSent.emplacement ?? null,
+      lockerNumber: stockSent.lockerNumber ?? null
     };
+
+    // Propager aussi la zone choisie en édition
+    if (stockSent.zone) {
+      stock.zone = stockSent.zone;          // { id: X }
+    } else {
+      stock.zone = null;
+    }
+
+    console.log('HTTP UPDATE payload vers /stocks :', JSON.stringify(stock));
 
     this.httpClient.post('api/stocks', stock).subscribe((stockReceived: any) => {
       this.stockArray = this.stockArray.map(p =>
@@ -52,6 +77,8 @@ export class StockService {
       );
     });
   }
+
+  // ------------ SUPPRESSION + HISTORIQUES --------------------------------
 
   removeChecksAndHistories(productId: number): void {
     forkJoin({
@@ -63,8 +90,8 @@ export class StockService {
         return;
       }
 
-      const deleteChecksRequests    = checks.map(c => this.httpClient.delete(`api/checks/${c.id}`));
-      const deleteHistoriesRequests = histories.map(h => this.httpClient.delete(`api/history/${h.id}`));
+      const deleteChecksRequests    = checks.map((c: any) => this.httpClient.delete(`api/checks/${c.id}`));
+      const deleteHistoriesRequests = histories.map((h: any) => this.httpClient.delete(`api/history/${h.id}`));
 
       forkJoin([...deleteChecksRequests, ...deleteHistoriesRequests]).subscribe({
         next:  () => this.removeStock(productId),
@@ -79,6 +106,8 @@ export class StockService {
       this.refreshStocks();
     });
   }
+
+  // ------------ LECTURE / HELPERS ----------------------------------------
 
   getStockById(id: number) {
     return this.stockArray.find(stock => stock.id == id);
@@ -108,46 +137,20 @@ export class StockService {
     );
   }
 
-  /**
-   * Retourne tous les checks groupés par stock ID en une seule requête.
-   * Requiert GET /checks/all-by-stocks côté backend.
-   */
   getAllChecksByStocks(): Observable<{ [stockId: number]: any[] }> {
     return this.httpClient.get<{ [stockId: number]: any[] }>('api/checks/all-by-stocks');
   }
 
-  // ── Helpers alitracers ──────────────────────────────────────────────────────
-
-  /**
-   * Retourne les alitracers d'un stock sous forme de tableau.
-   * "ALI001|ALI002" → ["ALI001", "ALI002"]
-   * "ALI001"        → ["ALI001"]
-   */
   static getAlitracerList(stock: any): string[] {
     if (!stock?.alitracer) return [];
     return stock.alitracer.split('|').map((a: string) => a.trim()).filter((a: string) => a !== '');
   }
 
-  /**
-   * Vérifie si un alitracer scanné correspond à un stock.
-   * Gère les alitracers multiples (séparés par |).
-   * Utilisé dans scanpage, depositpage et checkpage pour identifier un stock au scan.
-   *
-   * Exemple :
-   *   stock.alitracer = "ALI001|ALI002"
-   *   matchesAlitracer(stock, "ALI001") → true
-   *   matchesAlitracer(stock, "ALI002") → true
-   *   matchesAlitracer(stock, "ALI003") → false
-   */
   static matchesAlitracer(stock: any, scannedAlitracer: string): boolean {
     const list = StockService.getAlitracerList(stock);
     return list.some(a => a === scannedAlitracer.trim());
   }
 
-  /**
-   * Trouve un stock dans une liste à partir d'un alitracer scanné.
-   * Gère les alitracers multiples.
-   */
   static findByAlitracer(stocks: any[], scannedAlitracer: string): any | undefined {
     return stocks.find(s => StockService.matchesAlitracer(s, scannedAlitracer));
   }

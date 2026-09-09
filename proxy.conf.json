@@ -5,6 +5,11 @@
     "pathRewrite": {
       "^/api": ""
     }
+  },
+  "/ws": {
+    "target": "http://sx04nellt0200.ad.ponet:8001",
+    "secure": false,
+    "ws": true
   }
 }
 

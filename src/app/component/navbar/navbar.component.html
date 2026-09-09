@@ -1,107 +1,100 @@
 <nav class="bg-white shadow-lg fixed w-full z-10">
   <div class="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
-    <div class="relative flex items-center justify-between h-16">
+    <div class="relative flex items-center h-16 gap-2">
 
-      <!-- Logo -->
-      <div class="flex-1 flex items-center justify-center sm:items-stretch sm:justify-start">
-        <div class="flex-shrink-0 flex items-center text-blue-900 font-bold text-xl">
-          <img src="assets/images/OptiBoxLogo.jpg" alt="OptiBox Logo" class="h-10 w-auto self-center" />
-        </div>
+      <!-- Logo (fixe, ne rétrécit pas) -->
+      <div class="flex-shrink-0 flex items-center text-blue-900 font-bold text-xl">
+        <img src="assets/images/OptiBoxLogo.jpg" alt="OptiBox Logo" class="h-10 w-auto" />
+      </div>
 
-        <!-- Navigation links -->
-        <div class="hidden sm:block sm:ml-6">
-          <div class="flex space-x-4">
+      <!-- Navigation links (prend l'espace disponible, scrollable si besoin) -->
+      <div class="hidden sm:flex flex-1 min-w-0 overflow-x-auto sm:ml-4">
+        <div class="flex space-x-1 whitespace-nowrap">
 
-            <a *ngIf="isLoggedIn()"
-               routerLink="racine" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <fa-icon [icon]="faHouse"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="racine" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <fa-icon [icon]="faHouse"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn()"
-               routerLink="withdraw-deposit" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Retrait</span>
-              <fa-icon [icon]="faBarcode" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="withdraw-deposit" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Retrait</span>
+            <fa-icon [icon]="faBarcode" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn()"
-               routerLink="deposit" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Dépôt</span>
-              <fa-icon [icon]="faBarcode" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="deposit" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Dépôt</span>
+            <fa-icon [icon]="faBarcode" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn() && (isAdmin() || isMaintenance())"
-               routerLink="check" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Contrôles</span>
-              <fa-icon [icon]="faListCheck" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="check" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Contrôles</span>
+            <fa-icon [icon]="faListCheck" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn()"
-               routerLink="history" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Historique</span>
-              <fa-icon [icon]="faClockRotateLeft" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="atelier" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Atelier</span>
+            <fa-icon [icon]="faList" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn()"
-               routerLink="procedures" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Procédures</span>
-              <fa-icon [icon]="faList" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="history" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Historique</span>
+            <fa-icon [icon]="faClockRotateLeft" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn() && (isAdmin() || isMaintenance())"
-               routerLink="product" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Produits</span>
-              <fa-icon [icon]="faBox" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn()"
+             routerLink="procedures" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Procédures</span>
+            <fa-icon [icon]="faList" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn() && (isAdmin() || isMaintenance())"
-               routerLink="stock" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Stock</span>
-              <fa-icon [icon]="faBoxesStacked" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn() && (isAdmin() || isMaintenance())"
+             routerLink="product" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Produits</span>
+            <fa-icon [icon]="faBox" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn() && isAdmin()"
-               routerLink="user" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Utilisateurs</span>
-              <fa-icon [icon]="faPeopleGroup" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn() && (isAdmin() || isMaintenance())"
+             routerLink="stock" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Stock</span>
+            <fa-icon [icon]="faBoxesStacked" class="lg:hidden"></fa-icon>
+          </a>
 
-            <a *ngIf="isLoggedIn() && isAdmin()"
-               routerLink="lockers" routerLinkActive="bg-gray-200"
-               class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-              <span class="hidden lg:inline">Casiers</span>
-              <fa-icon [icon]="faDoorOpen" class="lg:hidden"></fa-icon>
-            </a>
+          <a *ngIf="isLoggedIn() && isAdmin()"
+             routerLink="user" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Utilisateurs</span>
+            <fa-icon [icon]="faPeopleGroup" class="lg:hidden"></fa-icon>
+          </a>
 
-          </div>
+          <a *ngIf="isLoggedIn() && isAdmin()"
+             routerLink="lockers" routerLinkActive="bg-gray-200"
+             class="text-gray-500 hover:bg-gray-200 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            <span class="hidden lg:inline">Casiers</span>
+            <fa-icon [icon]="faDoorOpen" class="lg:hidden"></fa-icon>
+          </a>
+
         </div>
       </div>
 
       <!-- Bouton connexion / user + logout -->
-      <div class="flex items-center">
-
-        <!-- NON connecté → bouton Connexion -->
-        <div *ngIf="!isLoggedIn()">
-          <button
-            type="button"
-            (click)="openLoginDialog()"
-            class="text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-md text-sm font-medium flex items-center gap-2 transition">
-            <fa-icon [icon]="faSignInAlt"></fa-icon>
-            <span class="hidden sm:inline">Connexion</span>
-          </button>
-        </div>
-
+      <div class="flex-shrink-0 flex items-center ml-auto">
         <!-- Connecté → nom + logout -->
         <div *ngIf="isLoggedIn()"
-             class="text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium flex items-center">
+             class="ml-auto text-gray-500 hover:text-gray-900 px-3 py-2 text-sm font-medium flex items-center">
           <span class="hidden lg:inline max-w-[140px] truncate">{{ getUsername() }}</span>
           <fa-icon [icon]="faCircleUser" class="lg:hidden text-2xl align-middle"></fa-icon>
           <button

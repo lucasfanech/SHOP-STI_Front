@@ -8,7 +8,6 @@
     </h2>
   </div>
 
-  <!-- line separator -->
   <div class="border-b-2 border-gray-200"></div>
 
   <!-- Onglets -->
@@ -119,18 +118,23 @@
         <tr>
           <td class="px-6 py-4 whitespace-nowrap">
             <img
-              [src]="history.stock.product.picture ? history.stock.product.picture : 'assets/images/default_image.jpg'"
+              [src]="history.stock?.product?.picture || 'assets/images/default_image.jpg'"
               alt="product image"
               class="h-10 w-10 rounded-full">
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.stock.alitracer }}</td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.stock.product.title }} {{ history.stock.product.size }}
+            {{ history.stock?.alitracer || 'N/A' }}
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.date | date: 'dd/MM/yyyy HH:mm' }}
+            {{ history.stock?.product?.title || 'Produit inconnu' }}
+            {{ history.stock?.product?.size || '' }}
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.user.username }}</td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.date | date:'dd/MM/yyyy HH:mm' }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.user?.username || 'Utilisateur inconnu' }}
+          </td>
         </tr>
       </ng-container>
       </tbody>
@@ -173,18 +177,23 @@
         <tr>
           <td class="px-6 py-4 whitespace-nowrap">
             <img
-              [src]="history.stock.product.picture ? history.stock.product.picture : 'assets/images/default_image.jpg'"
+              [src]="history.stock?.product?.picture || 'assets/images/default_image.jpg'"
               alt="product image"
               class="h-10 w-10 rounded-full">
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.stock.alitracer }}</td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.stock.product.title }} {{ history.stock.product.size }}
+            {{ history.stock?.alitracer || 'N/A' }}
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.date | date: 'dd/MM/yyyy HH:mm' }}
+            {{ history.stock?.product?.title || 'Produit inconnu' }}
+            {{ history.stock?.product?.size || '' }}
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.user.username }}</td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.date | date:'dd/MM/yyyy HH:mm' }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.user?.username || 'Utilisateur inconnu' }}
+          </td>
         </tr>
       </ng-container>
       </tbody>
@@ -230,28 +239,39 @@
         <tr>
           <td class="px-6 py-4 whitespace-nowrap">
             <img
-              [src]="history.stock.product.picture ? history.stock.product.picture : 'assets/images/default_image.jpg'"
+              [src]="history.stock?.product?.picture || 'assets/images/default_image.jpg'"
               alt="product image"
               class="h-10 w-10 rounded-full">
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.stock.alitracer }}</td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.stock.product.title }} {{ history.stock.product.size }}
+            {{ history.stock?.alitracer || 'N/A' }}
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
-          <span [ngClass]="{
-            'text-green-600 font-bold': history.status == 1,
-            'text-orange-500 font-bold': history.status == 0,
-            'text-red-600 font-bold': history.status == 2
-          }">
-            {{ history.status == 0 ? 'NOK' : history.status == 1 ? 'OK' : history.status == 2 ? 'HS' : 'Inconnu' }}
-          </span>
+            {{ history.stock?.product?.title || 'Produit inconnu' }}
+            {{ history.stock?.product?.size || '' }}
           </td>
           <td class="px-6 py-4 whitespace-nowrap">
-            {{ history.date | date: 'dd/MM/yyyy HH:mm' }}
+            <span
+              [ngClass]="{
+                'text-green-600 font-bold': history.status == 1,
+                'text-orange-500 font-bold': history.status == 0,
+                'text-red-600 font-bold': history.status == 2
+              }">
+              {{ history.status == 0 ? 'NOK'
+              : history.status == 1 ? 'OK'
+                : history.status == 2 ? 'HS'
+                  : 'Inconnu' }}
+            </span>
           </td>
-          <td class="px-6 py-4 whitespace-nowrap">{{ history.user.username }}</td>
-          <td class="px-6 py-4">{{ history.comment || '-' }}</td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.date | date:'dd/MM/yyyy HH:mm' }}
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap">
+            {{ history.user?.username || 'Utilisateur inconnu' }}
+          </td>
+          <td class="px-6 py-4">
+            {{ history.comment || '-' }}
+          </td>
           <td class="px-6 py-4 text-center">
             <button
               *ngIf="history.pdfFilename"
@@ -261,11 +281,9 @@
               <fa-icon [icon]="faFilePdf"></fa-icon>
               <span>PDF</span>
             </button>
-            <span
-              *ngIf="!history.pdfFilename"
-              class="text-gray-400 text-xs italic">
-            Aucun PDF
-          </span>
+            <span *ngIf="!history.pdfFilename" class="text-gray-400 text-xs italic">
+              Aucun PDF
+            </span>
           </td>
         </tr>
       </ng-container>

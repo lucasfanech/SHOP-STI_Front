@@ -1,26 +1,33 @@
 import { Component, OnInit } from '@angular/core';
-import { StockService } from '../../services/stock.service';
-import { NgForOf, NgIf } from '@angular/common';
+import { NgForOf, NgIf, NgClass } from '@angular/common';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+
 import { CarouselModule } from 'primeng/carousel';
 import { TagModule } from 'primeng/tag';
 import { ButtonModule } from 'primeng/button';
 import { DialogModule } from 'primeng/dialog';
 import { ToastModule } from 'primeng/toast';
 import { MessageService } from 'primeng/api';
-import { ProductService } from '../../services/product.service';
+
 import { faBoxesStacked } from '@fortawesome/free-solid-svg-icons';
 import { FaIconComponent } from '@fortawesome/angular-fontawesome';
+
+import { QRCodeModule } from 'angularx-qrcode';
+
+import { StockService } from '../../services/stock.service';
+import { ProductService } from '../../services/product.service';
 import { CheckService } from '../../services/check.service';
 import { HistoryService } from '../../services/history.service';
 import { AuthAppService } from '../../services/auth-app.service';
-import { QRCodeModule } from 'angularx-qrcode';
+import { ZoneService, Zone } from '../../services/zone.service';
+
+type Emplacement = 'Casier' | 'Mur' | 'Atelier' | '';
 
 @Component({
   selector: 'app-stockpage',
   standalone: true,
   imports: [
-    NgForOf, NgIf,
+    NgForOf, NgIf, NgClass,
     ReactiveFormsModule, FormsModule,
     CarouselModule, TagModule, ButtonModule, DialogModule, ToastModule,
     FaIconComponent, QRCodeModule,
@@ -31,6 +38,8 @@ import { QRCodeModule } from 'angularx-qrcode';
 })
 export class StockpageComponent implements OnInit {
 
+  // ------- Modèle "filtre produit" pour le sélecteur du haut ---------
+
   stock: any = {
     product: { id: null, title: '', size: '', cmu: '', picture: '' },
     available: null,
@@ -38,39 +47,52 @@ export class StockpageComponent implements OnInit {
     creationDate: null,
   };
 
+  // ------- Stock sélectionné pour édition / suppression --------------
+
   selectedStock: any = {
-    product: null, available: null, status: null, creationDate: null,
+    product: null,
+    available: null,
+    status: null,
+    creationDate: null,
+    emplacement: '' as Emplacement,
+    lockerNumber: null,
+    zone: null
   };
 
-  // ── Création stock ──────────────────────────────────────────────────────────
+  // ------- Création de stock -----------------------------------------
 
   dialogCreateVisible = false;
   selectedProductForCreate: any = null;
+
   newLockerNumber: number | null = null;
+  newEmplacement: Emplacement = '';
   reference = '';
 
-  /**
-   * Liste des alitracers saisis dans le dialog de création.
-   * Démarre avec un champ vide.
-   * Sauvegardé en base sous la forme "ALI001|ALI002" (séparateur pipe).
-   */
   alitracerInputs: string[] = [''];
 
-  // ── Modification stock ─────────────────────────────────────────────────────
+  // Zone choisie en création (Atelier uniquement)
+  zones: Zone[] = [];
+  selectedZoneIdForCreate: number | null = null;
+
+  // ------- Modification de stock -------------------------------------
 
   dialog1Visible = false;
   dialog2Visible = false;
 
-  /**
-   * Alitracers sous forme de liste pour l'édition (split du champ alitracer).
-   */
   editAlitracerInputs: string[] = [''];
 
   countCheck   = 0;
   countHistory = 0;
 
+  // Zone choisie en édition (Atelier uniquement)
+  selectedZoneIdForEdit: number | null = null;
+
+  // ------- Divers ----------------------------------------------------
+
   responsiveOptions: any[] | undefined;
   listOfProducts: any[] = [];
+
+  protected readonly faBoxesStacked = faBoxesStacked;
 
   constructor(
     protected stockService: StockService,
@@ -78,42 +100,54 @@ export class StockpageComponent implements OnInit {
     protected productService: ProductService,
     protected checkService: CheckService,
     protected historyService: HistoryService,
-    private authApp: AuthAppService
+    private authApp: AuthAppService,
+    private zoneService: ZoneService
   ) {}
 
-  ngOnInit() {
+  async ngOnInit() {
     this.responsiveOptions = [
       { breakpoint: '1400px', numVisible: 3, numScroll: 3 },
       { breakpoint: '1220px', numVisible: 2, numScroll: 2 },
       { breakpoint: '1100px', numVisible: 1, numScroll: 1 },
     ];
+
     this.listOfProducts = this.productService.getAllProducts();
-    this.stockService.refreshStocks();
+    await this.stockService.refreshStocks();
+
+    // Charger les zones atelier
+    await this.zoneService.refreshZones();
+    this.zones = this.zoneService.getAllZones();
   }
+
+  // ------- Auth ------------------------------------------------------
 
   isLoggedIn()    { return this.authApp.isLoggedIn(); }
   isAdmin()       { return this.authApp.isAdmin(); }
   isMaintenance() { return this.authApp.isMaintenance(); }
   isOperator()    { return this.authApp.isOperator(); }
 
-  // ── Helpers alitracers ─────────────────────────────────────────────────────
+  // ------- Helpers alitracers ----------------------------------------
 
-  /**
-   * Retourne les alitracers d'un stock sous forme de tableau.
-   * "ALI001|ALI002" → ["ALI001", "ALI002"]
-   * "ALI001"        → ["ALI001"]
-   */
   getAlitracerList(stock: any): string[] {
     if (!stock?.alitracer) return [];
-    return stock.alitracer.split('|').map((a: string) => a.trim()).filter((a: string) => a !== '');
+    return stock.alitracer
+      .split('|')
+      .map((a: string) => a.trim())
+      .filter((a: string) => a !== '');
   }
 
-  /** Joint la liste en String pour la sauvegarde. */
   private joinAlitracers(inputs: string[]): string {
-    return inputs.map(a => a.trim()).filter(a => a !== '').join('|');
+    return inputs
+      .map(a => a.trim())
+      .filter(a => a !== '')
+      .join('|');
   }
 
-  // ── Dialog CRÉATION ────────────────────────────────────────────────────────
+  trackByIndex(index: number): number {
+    return index;
+  }
+
+  // ------- Dialog CRÉATION ------------------------------------------
 
   openCreateDialog() {
     if (!this.stock.product?.id) return;
@@ -121,9 +155,12 @@ export class StockpageComponent implements OnInit {
     this.selectedProductForCreate = this.productService.getAllProducts()
       .find((p: any) => p.id == this.stock.product.id);
 
-    this.newLockerNumber   = null;
-    this.alitracerInputs   = [''];   // commence avec 1 champ
-    this.reference         = '';
+    this.newLockerNumber          = null;
+    this.newEmplacement           = '';
+    this.reference                = '';
+    this.alitracerInputs          = [''];
+    this.selectedZoneIdForCreate  = null;
+
     this.dialogCreateVisible = true;
   }
 
@@ -138,51 +175,91 @@ export class StockpageComponent implements OnInit {
   }
 
   createStock() {
-    // lockerNumber null ou 0 = stock mur (pas de casier) → autorisé
-    if (this.newLockerNumber !== null && (this.newLockerNumber < 1 || this.newLockerNumber > 24)) {
+    // Vérif emplacement
+    if (!this.newEmplacement) {
       this.messageService.add({
-        severity: 'error', summary: 'Erreur',
-        detail: 'Le numéro de casier doit être compris entre 1 et 24, ou laissez vide pour le mur.'
+        severity: 'error',
+        summary: 'Erreur',
+        detail: 'Veuillez sélectionner un emplacement.'
       });
       return;
     }
 
+    // Vérif casier
+    if (this.newEmplacement === 'Casier') {
+      if (!this.newLockerNumber || this.newLockerNumber < 1 || this.newLockerNumber > 24) {
+        this.messageService.add({
+          severity: 'error',
+          summary: 'Erreur',
+          detail: 'Le numéro de casier doit être compris entre 1 et 24.'
+        });
+        return;
+      }
+    }
+
+    // Vérif alitracer(s)
     const alitracer = this.joinAlitracers(this.alitracerInputs);
     if (!alitracer) {
       this.messageService.add({
-        severity: 'error', summary: 'Erreur',
+        severity: 'error',
+        summary: 'Erreur',
         detail: 'Veuillez saisir au moins un alitracer.'
       });
       return;
     }
 
-    const stockToSend = {
+    const stockToSend: any = {
       product:      this.selectedProductForCreate,
       alitracer,
       reference:    this.reference,
       available:    true,
       status:       1,
-      creationDate: new Date()
+      creationDate: new Date(),
+      emplacement:  this.newEmplacement,
+      lockerNumber: this.newEmplacement === 'Casier' ? this.newLockerNumber : null
     };
 
-    this.stockService.addStock(stockToSend, this.newLockerNumber);
+    // Lien avec zone si emplacement = Atelier
+    if (this.newEmplacement === 'Atelier' && this.selectedZoneIdForCreate) {
+      stockToSend.zone = { id: this.selectedZoneIdForCreate };
+    } else {
+      stockToSend.zone = null;
+    }
+
+    console.log('CREATE payload :', JSON.stringify(stockToSend));
+
+    this.stockService.addStock(stockToSend);
     this.dialogCreateVisible = false;
     this.showAddToast();
+
+    // reset du sélecteur produit
     this.stock.product.id = null;
   }
 
-  // ── Dialog MODIFICATION ────────────────────────────────────────────────────
+  // ------- Dialog MODIFICATION --------------------------------------
 
   showDialog(stock: any, dialogNumber: number) {
     if (dialogNumber === 1) {
       this.dialog1Visible = true;
-      // Convertit le champ alitracer en liste pour l'édition
+
       this.editAlitracerInputs = this.getAlitracerList(stock);
-      if (this.editAlitracerInputs.length === 0) this.editAlitracerInputs = [''];
+      if (this.editAlitracerInputs.length === 0) {
+        this.editAlitracerInputs = [''];
+      }
     } else {
       this.dialog2Visible = true;
     }
+
+    // Cloner le stock sélectionné
     this.selectedStock = { ...stock };
+
+    // S'assurer que emplacement est initialisé
+    if (!this.selectedStock.emplacement) {
+      this.selectedStock.emplacement = '';
+    }
+
+    // Init de la zone en édition
+    this.selectedZoneIdForEdit = this.selectedStock.zone?.id ?? null;
   }
 
   addEditAlitracerField() {
@@ -196,15 +273,30 @@ export class StockpageComponent implements OnInit {
   }
 
   saveEditStock() {
+    // Recalcule la chaîne alitracer à partir des inputs
     const alitracer = this.joinAlitracers(this.editAlitracerInputs);
-    if (!alitracer) {
-      this.messageService.add({
-        severity: 'error', summary: 'Erreur',
-        detail: 'Veuillez saisir au moins un alitracer.'
-      });
-      return;
+
+    // On n’empêche pas la maj de tout si alitracer est vide :
+    // on envoie juste null au back, qui décidera quoi faire.
+    this.selectedStock.alitracer = alitracer || null;
+
+    // Si l'emplacement n'est plus Casier, lockerNumber = null
+    if (this.selectedStock.emplacement !== 'Casier') {
+      this.selectedStock.lockerNumber = null;
     }
-    this.selectedStock.alitracer = alitracer;
+
+    // Gestion de la zone : on envoie TOUJOURS la clé "zone"
+    if (this.selectedStock.emplacement === 'Atelier' && this.selectedZoneIdForEdit) {
+      this.selectedStock.zone = { id: this.selectedZoneIdForEdit };
+    } else {
+      // dans tous les autres cas, on enlève la zone côté back
+      this.selectedStock.zone = null;
+    }
+
+    console.log('payload envoyé au back : ', this.selectedStock);
+
+    console.log('UPDATE payload :', JSON.stringify(this.selectedStock));
+
     this.stockService.updateStock(this.selectedStock);
     this.hideDialog();
     this.showUpdateToast();
@@ -215,7 +307,7 @@ export class StockpageComponent implements OnInit {
     this.dialog2Visible = false;
   }
 
-  // ── Suppression ────────────────────────────────────────────────────────────
+  // ------- Suppression ----------------------------------------------
 
   triggerDeleteStock() {
     this.checkService.getCheckByStockId(this.selectedStock.id).then((response: any) => {
@@ -226,20 +318,35 @@ export class StockpageComponent implements OnInit {
     });
   }
 
+  // ------- Toasts ---------------------------------------------------
+
+  showAddToast() {
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Succès',
+      detail: 'Un stock a été ajouté.'
+    });
+  }
+
+  showUpdateToast() {
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Succès',
+      detail: 'Un stock a été modifié.'
+    });
+  }
+
+  showDeleteToast() {
+    this.messageService.add({
+      severity: 'success',
+      summary: 'Succès',
+      detail: 'Un stock a été supprimé.'
+    });
+  }
+
+  // ------- Autre ----------------------------------------------------
+
   convertToString(stock_id: number): string {
     return stock_id.toString();
   }
-
-  // ── Toasts ─────────────────────────────────────────────────────────────────
-
-  showAddToast()    { this.messageService.add({ severity: 'success', summary: 'Succès', detail: 'Un stock a été ajouté.' }); }
-  showUpdateToast() { this.messageService.add({ severity: 'success', summary: 'Succès', detail: 'Un stock a été modifié.' }); }
-  showDeleteToast() { this.messageService.add({ severity: 'success', summary: 'Succès', detail: 'Un stock a été supprimé.' }); }
-
-  /** Nécessaire pour que ngFor sur les tableaux primitifs fonctionne avec [(ngModel)] */
-  trackByIndex(index: number): number {
-    return index;
-  }
-
-  protected readonly faBoxesStacked = faBoxesStacked;
 }

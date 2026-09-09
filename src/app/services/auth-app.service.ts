@@ -24,7 +24,7 @@ export class AuthAppService {
   private currentUserSubject = new BehaviorSubject<AppUser | null>(null);
   currentUser$ = this.currentUserSubject.asObservable();
 
-  private sessionTTL =  10 * 60 * 1000;
+  private sessionTTL =  45 * 60 * 1000;
   private logoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private httpClient: HttpClient) {
