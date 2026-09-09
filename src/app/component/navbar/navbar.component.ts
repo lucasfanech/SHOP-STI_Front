@@ -1,85 +1,127 @@
-import {Component, OnInit} from '@angular/core';
-import {Router, RouterLink, RouterLinkActive} from "@angular/router";
-import {KeycloakService} from "keycloak-angular";
+import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import {KeycloakProfile} from "keycloak-js";
-import {FaIconComponent} from "@fortawesome/angular-fontawesome";
-import {faHouse} from "@fortawesome/free-solid-svg-icons";
-import {faBarcode} from "@fortawesome/free-solid-svg-icons";
-import {faListCheck} from "@fortawesome/free-solid-svg-icons";
-import {faClockRotateLeft} from "@fortawesome/free-solid-svg-icons";
-import {faBox} from "@fortawesome/free-solid-svg-icons";
-import {faBoxesStacked} from "@fortawesome/free-solid-svg-icons";
-import {faPeopleGroup} from "@fortawesome/free-solid-svg-icons";
-import {faSignOutAlt} from "@fortawesome/free-solid-svg-icons";
-import {faCircleUser} from "@fortawesome/free-solid-svg-icons";
+import { FormsModule } from '@angular/forms';
+import { FaIconComponent } from '@fortawesome/angular-fontawesome';
+import {
+  faHouse, faBarcode, faListCheck, faClockRotateLeft,
+  faBox, faList, faBoxesStacked, faPeopleGroup,
+  faSignOutAlt, faCircleUser, faSignInAlt, faDoorOpen
+} from '@fortawesome/free-solid-svg-icons';
+import { ToastModule } from 'primeng/toast';
+import { DialogModule } from 'primeng/dialog';
+import { MessageService } from 'primeng/api';
+import { AuthAppService } from '../../services/auth-app.service';
+import { UserService } from '../../services/user.service';
+import { ScanService } from '../../services/scan.service';
 
 @Component({
   selector: 'app-navbar',
   standalone: true,
   imports: [
-    RouterLink,
-    RouterLinkActive,
-    CommonModule,
-    FaIconComponent
+    RouterLink, RouterLinkActive,
+    CommonModule, FormsModule,
+    FaIconComponent, ToastModule, DialogModule
   ],
   templateUrl: './navbar.component.html',
-  styleUrl: './navbar.component.css'
+  styleUrl: './navbar.component.css',
+  providers: [MessageService]
 })
-export class NavbarComponent implements OnInit {
+export class NavbarComponent implements OnInit, OnDestroy {
 
-  userProfile: KeycloakProfile | undefined;
-  constructor(private keycloakService: KeycloakService, private router: Router) {}
+  // ── Login dialog ──────────────────────────────────────────────────────────
+  loginDialogVisible = false;
+  loginToken         = '';
+  loginError         = '';
+  loginLoading       = false;
 
-  ngOnInit() {
-    if (this.isLoggedIn()) {
-      this.loadUserProfile();
+  constructor(
+    private authApp: AuthAppService,
+    private userService: UserService,
+    private scanService: ScanService,
+    private messageService: MessageService,
+    private router: Router
+  ) {}
+
+  ngOnInit(): void {}
+  ngOnDestroy(): void {}
+
+  // ── Auth ──────────────────────────────────────────────────────────────────
+
+  isLoggedIn()    { return this.authApp.isLoggedIn(); }
+  isAdmin()       { return this.authApp.isAdmin(); }
+  isMaintenance() { return this.authApp.isMaintenance(); }
+  isOperator()    { return this.authApp.isOperator(); }
+  getUsername()   { return this.authApp.getUsername(); }
+
+  // ── Login dialog ──────────────────────────────────────────────────────────
+
+  openLoginDialog(): void {
+    this.loginToken   = '';
+    this.loginError   = '';
+    this.loginLoading = false;
+    this.loginDialogVisible = true;
+  }
+
+  async submitLogin(): Promise<void> {
+    if (!this.loginToken.trim()) {
+      this.loginError = 'Veuillez saisir votre identifiant.';
+      return;
+    }
+
+    this.loginError   = '';
+    this.loginLoading = true;
+
+    try {
+      const success = await this.authApp.authenticate(this.loginToken.trim());
+
+      if (success) {
+        this.loginDialogVisible = false;
+        this.messageService.add({
+          severity: 'success',
+          summary: 'Connexion réussie',
+          detail: `Bienvenue, ${this.getUsername()} !`
+        });
+        this.router.navigate(['/racine']);
+      } else {
+        this.loginError = 'Identifiant non reconnu.';
+      }
+    } catch {
+      this.loginError = 'Erreur de connexion. Réessayez.';
+    } finally {
+      this.loginLoading = false;
     }
   }
 
-  isLoggedIn(): boolean {
-    return this.keycloakService.isLoggedIn();
+  onEnterKey(event: KeyboardEvent): void {
+    if (event.key === 'Enter') this.submitLogin();
   }
 
-  loadUserProfile() {
-    this.keycloakService.loadUserProfile().then(profile => {
-      this.userProfile = profile;
-    }).catch(error => {
-      console.error('Error loading user profile', error);
-    });
-  }
-
-  isAdmin(): boolean {
-    return this.keycloakService.isUserInRole('admin');
-  }
-
-  getUsername(): string {
-    if (this.userProfile) {
-      return <string>this.userProfile.username;
-    } else {
-      return '';
-    }
-  }
+  // ── Logout ────────────────────────────────────────────────────────────────
 
   logout(): void {
-    // Réinitialisation du profil utilisateur après la déconnexion
-    this.userProfile = undefined;
-    // clear token
-    this.keycloakService.clearToken();
-    // clear cache
-    this.keycloakService.getKeycloakInstance().clearToken();
-    // Déconnexion de l'utilisateur
-    this.keycloakService.logout('http://localhost:4200');
+    const username = this.getUsername();
+    this.authApp.logout();
+    this.messageService.add({
+      severity: 'info',
+      summary: 'Déconnexion',
+      detail: username ? `Au revoir, ${username}` : 'Vous êtes déconnecté'
+    });
+    setTimeout(() => this.router.navigate(['/login']), 1500);
   }
 
-  protected readonly faHouse = faHouse;
-  protected readonly faBarcode = faBarcode;
-  protected readonly faListCheck = faListCheck;
-  protected readonly faClockRotateLeft = faClockRotateLeft;
-  protected readonly faBox = faBox;
-  protected readonly faBoxesStacked = faBoxesStacked;
-  protected readonly faPeopleGroup = faPeopleGroup;
-  protected readonly faSignOutAlt = faSignOutAlt;
-  protected readonly faCircleUser = faCircleUser;
+  // ── Icônes ────────────────────────────────────────────────────────────────
 
+  protected readonly faHouse           = faHouse;
+  protected readonly faBarcode         = faBarcode;
+  protected readonly faListCheck       = faListCheck;
+  protected readonly faClockRotateLeft = faClockRotateLeft;
+  protected readonly faBox             = faBox;
+  protected readonly faList            = faList;
+  protected readonly faBoxesStacked    = faBoxesStacked;
+  protected readonly faPeopleGroup     = faPeopleGroup;
+  protected readonly faSignOutAlt      = faSignOutAlt;
+  protected readonly faCircleUser      = faCircleUser;
+  protected readonly faSignInAlt       = faSignInAlt;
+  protected readonly faDoorOpen        = faDoorOpen;
 }

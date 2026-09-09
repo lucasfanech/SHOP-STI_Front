@@ -1,0 +1,99 @@
+<div class="flex flex-col gap-6 p-6 sm:p-8 md:p-10">
+
+  <!-- Accès refusé si non admin -->
+  <div *ngIf="!isAdmin()"
+       class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+    <p class="font-bold">Accès interdit</p>
+    <p>Cette page est réservée aux administrateurs.</p>
+  </div>
+
+  <div *ngIf="isAdmin()">
+
+    <!-- En-tête -->
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-2">
+      <div>
+        <h1 class="text-2xl font-bold flex items-center gap-3">
+          <fa-icon [icon]="faDoorOpen"></fa-icon>
+          Gestion des casiers
+        </h1>
+        <p class="text-gray-500 text-sm mt-1">
+          Cliquez sur un casier pour l'ouvrir ou le fermer individuellement.
+        </p>
+      </div>
+
+      <!-- Bouton Ouvrir / Fermer tout -->
+      <button
+        type="button"
+        class="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white transition"
+        [ngClass]="allLockersLoading
+          ? 'bg-gray-400 cursor-not-allowed'
+          : allOpen
+            ? 'bg-red-500 hover:bg-red-700'
+            : 'bg-green-600 hover:bg-green-800'"
+        [disabled]="allLockersLoading"
+        (click)="toggleAllLockers()">
+        <i *ngIf="allLockersLoading" class="pi pi-spin pi-spinner"></i>
+        <fa-icon *ngIf="!allLockersLoading" [icon]="allOpen ? faLock : faLockOpen"></fa-icon>
+        {{ allLockersLoading ? 'En cours...' : allOpen ? 'Fermer tous les casiers' : 'Ouvrir tous les casiers' }}
+      </button>
+    </div>
+
+    <!-- Légende -->
+    <div class="flex flex-wrap gap-4 mb-4 text-xs font-medium text-gray-600">
+      <span class="flex items-center gap-1.5">
+        <span class="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+        Casier ouvert
+      </span>
+      <span class="flex items-center gap-1.5">
+        <span class="inline-block w-3 h-3 rounded-full bg-gray-300 border border-gray-400"></span>
+        Casier fermé
+      </span>
+      <span class="flex items-center gap-1.5 text-gray-400 italic">
+        Cliquez sur un casier pour le basculer
+      </span>
+    </div>
+
+
+    <!-- ════════════════════════════════
+         GRILLE DES CASIERS
+         ════════════════════════════════ -->
+    <div class="bg-white rounded-3xl shadow-xl p-6">
+
+      <app-locker-grid [itemTemplate]="lockerCellTpl" (boxClick)="toggleLocker($event)"></app-locker-grid>
+
+      <ng-template #lockerCellTpl let-num>
+        <div class="w-full h-full flex flex-col items-center justify-center p-1.5"
+             [ngClass]="{
+               'bg-green-500 text-white': getLocker(num).isOpen,
+               'bg-gray-300 text-gray-700': !getLocker(num).isOpen
+             }">
+          <i *ngIf="getLocker(num).isLoading" class="pi pi-spin pi-spinner text-xl mb-1"></i>
+          <fa-icon *ngIf="!getLocker(num).isLoading"
+                   [icon]="getLocker(num).isOpen ? faDoorOpen : faDoorClosed"
+                   class="text-xl mb-1"></fa-icon>
+          <div class="font-bold text-sm">Box {{ num }}</div>
+          <div class="text-xs mt-0.5 font-medium opacity-80">
+            {{ getLocker(num).isOpen ? 'Ouvert' : 'Fermé' }}
+          </div>
+        </div>
+      </ng-template>
+      <!-- /grille -->
+
+      <!-- Compteur résumé -->
+      <div class="flex justify-center gap-6 mt-4 text-sm text-gray-600">
+        <span class="flex items-center gap-1.5 font-medium text-green-700">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>
+          {{ openCount }} ouvert(s)
+        </span>
+        <span class="flex items-center gap-1.5 font-medium text-gray-500">
+          <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-300 border border-gray-400"></span>
+          {{ 24 - openCount }} fermé(s)
+        </span>
+      </div>
+
+    </div><!-- /card -->
+
+    <p-toast position="bottom-right"></p-toast>
+
+  </div>
+</div>
