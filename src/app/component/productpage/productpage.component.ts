@@ -11,6 +11,8 @@ import {MessageService} from "primeng/api";
 import {faBox} from "@fortawesome/free-solid-svg-icons";
 import {FaIconComponent} from "@fortawesome/angular-fontawesome";
 import {StockService} from "../../services/stock.service";
+import { AuthAppService } from '../../services/auth-app.service';
+
 
 @Component({
   selector: 'app-productpage',
@@ -33,19 +35,17 @@ import {StockService} from "../../services/stock.service";
 export class ProductpageComponent implements OnInit {
   product: any = {
     title: '',
-    type: '',
     size: '',
     cmu: '',
-    location: '',
+    brand: '',
     picture: null,
   }
 
   selectedProduct: any = {
     title: '',
-    type: '',
     size: '',
     cmu: '',
-    location: '',
+    brand: '',
     picture: '',
   }
 
@@ -57,7 +57,7 @@ export class ProductpageComponent implements OnInit {
 
   responsiveOptions: any[] | undefined;
 
-  constructor(protected productService: ProductService, private messageService: MessageService, private stockService: StockService) {}
+  constructor(protected productService: ProductService, private messageService: MessageService, private stockService: StockService, private authApp: AuthAppService) {}
 
   ngOnInit(){
     this.responsiveOptions = [
@@ -84,6 +84,22 @@ export class ProductpageComponent implements OnInit {
     ];
   }
 
+  isLoggedIn(): boolean {
+    return this.authApp.isLoggedIn();
+  }
+
+  isAdmin(): boolean {
+    return this.authApp.isAdmin();
+  }
+
+  isMaintenance(): boolean {
+    return this.authApp.isMaintenance();
+  }
+
+  isOperator(): boolean {
+    return this.authApp.isOperator();
+  }
+
   onFileSelected(event: any, productToUpdate: any) {
     const file: File = event.target.files[0];
 
@@ -108,8 +124,8 @@ export class ProductpageComponent implements OnInit {
 
 
   addProduct() {
-    // check if the product has a title, type, size, cmu and location
-    if(this.product.title.trim().length === 0 || this.product.type.trim().length === 0 || this.product.size.trim().length === 0 || this.product.cmu.trim().length === 0 || this.product.location.trim().length === 0){
+    // check if the product has a title, type, size, cmu and brand
+    if(this.product.title.trim().length === 0 || this.product.size.trim().length === 0 || this.product.cmu.trim().length === 0 || this.product.brand.trim().length === 0) {
       this.showMissingFieldsToast();
       return;
     }
@@ -120,10 +136,9 @@ export class ProductpageComponent implements OnInit {
     // reset the product
     this.product = {
       title: '',
-      type: '',
       size: '',
       cmu: '',
-      location: '',
+      brand: '',
       picture: null,
     }
 
@@ -131,8 +146,8 @@ export class ProductpageComponent implements OnInit {
   }
 
   updateProduct() {
-    // check if the product has a title, type, size, cmu and location
-    if(this.selectedProduct.title.trim().length === 0 || this.selectedProduct.type.trim().length === 0 || this.selectedProduct.size.trim().length === 0 || this.selectedProduct.cmu.trim().length === 0 || this.selectedProduct.location.trim().length === 0){
+    // check if the product has a title, type, size, cmu and brand
+    if(this.selectedProduct.title.trim().length === 0 ||  this.selectedProduct.size.trim().length === 0 || this.selectedProduct.cmu.trim().length === 0 || this.selectedProduct.brand.trim().length === 0){
       this.showMissingFieldsToast();
       return;
     }

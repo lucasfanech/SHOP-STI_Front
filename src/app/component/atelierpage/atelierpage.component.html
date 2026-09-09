@@ -1,0 +1,632 @@
+<div class="flex flex-col gap-6 p-6 sm:p-8 md:p-10">
+
+  <!-- Non connecté -->
+  <div *ngIf="!isLoggedIn()"
+       class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+    <p class="font-bold">Accès interdit</p>
+    <p>Vous devez être connecté pour accéder à l'atelier.</p>
+  </div>
+
+  <div *ngIf="isLoggedIn()">
+
+    <!-- En-tête -->
+    <h1 class="text-2xl font-bold py-3 flex items-center gap-3">
+      <fa-icon [icon]="faWrench"></fa-icon>
+      Zones Atelier
+    </h1>
+    <p class="text-gray-500 mb-4">
+      Sélectionnez une zone sur la carte ou dans la liste pour contrôler les outils.
+    </p>
+
+    <!-- Carte des zones -->
+    <div class="bg-white rounded-3xl shadow-xl p-6 mb-6">
+      <div class="flex justify-between items-center mb-3">
+        <div>
+          <h2 class="text-lg font-bold text-gray-900">Carte des zones</h2>
+          <p class="text-xs text-gray-500">
+            Cliquez sur une zone pour la sélectionner.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="px-3 py-1 text-xs font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 border border-gray-300"
+          (click)="openCreateZoneDialog()">
+          + Nouvelle zone
+        </button>
+      </div>
+
+      <div
+        class="relative mx-auto overflow-hidden rounded-2xl border border-gray-200"
+        style="max-width: 900px; height: 420px;">
+        <img
+          src="assets/images/plan-atelier.png"
+          alt="Plan atelier"
+          class="w-full h-full object-cover select-none pointer-events-none">
+
+        <button
+          *ngFor="let z of zonesWithCoords"
+          type="button"
+          class="absolute bg-blue-500/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded
+                 transform -translate-x-1/2 -translate-y-1/2"
+          [style.top.%]="z.y"
+          [style.left.%]="z.x"
+          (click)="selectZone(z.zone)">
+          {{ z.zone.name }}
+        </button>
+      </div>
+
+      <p class="mt-3 text-xs text-gray-500">
+        Zone sélectionnée :
+        <span *ngIf="selectedZone; else allZones" class="font-semibold">
+          {{ selectedZone?.name }}
+        </span>
+        <ng-template #allZones><span class="italic">Toutes</span></ng-template>
+      </p>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+
+      <div class="bg-white rounded-2xl shadow p-5 text-center">
+        <p class="text-3xl font-bold text-blue-600">{{ filteredAtelierStocks.length }}</p>
+        <p class="text-gray-500 font-medium">Stocks zone sélectionnée</p>
+        <p class="mt-1 text-xs text-gray-400">
+          Zone : {{ selectedZone?.name || 'Toutes' }}
+        </p>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-5 text-center">
+        <p class="text-3xl font-bold text-green-600">{{ checkedThisMonthCount }}</p>
+        <p class="text-gray-500 font-medium">Contrôlés ce mois</p>
+      </div>
+
+      <div class="bg-white rounded-2xl shadow p-5 text-center">
+        <p class="text-3xl font-bold"
+           [ngClass]="needsCheckCount > 0 ? 'text-orange-500' : 'text-green-600'">
+          {{ needsCheckCount }}
+        </p>
+        <p class="text-gray-500 font-medium">Contrôles à faire</p>
+      </div>
+
+    </div>
+
+    <!-- Bloc principal -->
+    <div class="bg-white rounded-3xl shadow-xl p-6">
+
+      <!-- Toolbar -->
+      <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+        <div>
+          <h2 class="text-xl font-bold text-gray-900">Stocks — Zones Atelier</h2>
+          <p *ngIf="filteredAtelierStocks.length > 0" class="text-sm text-gray-400 mt-0.5">
+            Ratio réglementaire ce mois : <b>{{ getLockerCheckRatioAtelier() }}</b>
+          </p>
+          <p *ngIf="selectedZone" class="text-xs text-gray-400 mt-0.5">
+            Zone sélectionnée : <b>{{ selectedZone?.name }}</b>
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-2 items-center">
+          <!-- Liste des zones -->
+          <div class="flex flex-wrap gap-1">
+            <button
+              type="button"
+              class="px-2.5 py-1 text-xs rounded-full border border-gray-300"
+              [ngClass]="!selectedZone ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700'"
+              (click)="selectZone(null)">
+              Toutes
+            </button>
+
+            <button
+              *ngFor="let z of zones"
+              type="button"
+              class="px-2.5 py-1 text-xs rounded-full border border-gray-300"
+              [ngClass]="selectedZone?.id === z.id ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-gray-700'"
+              (click)="selectZone(z)">
+              {{ z.name }}
+            </button>
+          </div>
+
+          <!-- Contrôle individuel -->
+          <button type="button"
+                  [disabled]="filteredAtelierStocks.length === 0"
+                  (click)="startScan('INDIVIDUAL')"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm
+                         bg-blue-500 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed
+                         text-white transition">
+            <fa-icon [icon]="faCamera"></fa-icon>
+            Contrôle individuel
+          </button>
+
+          <!-- Contrôle réglementaire -->
+          <button type="button"
+                  [disabled]="filteredAtelierStocks.length === 0"
+                  (click)="startScan('REGULATORY')"
+                  class="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm
+                         bg-purple-600 hover:bg-purple-700 disabled:bg-purple-300 disabled:cursor-not-allowed
+                         text-white transition">
+            <fa-icon [icon]="faCamera"></fa-icon>
+            Contrôle réglementaire
+          </button>
+        </div>
+      </div>
+
+      <!-- Liste vide -->
+      <div *ngIf="filteredAtelierStocks.length === 0"
+           class="flex flex-col items-center justify-center py-16 text-gray-400">
+        <fa-icon [icon]="faWrench" class="text-5xl mb-4 opacity-30"></fa-icon>
+        <p class="text-lg font-medium">Aucun stock dans cette zone</p>
+        <p class="text-sm mt-1">
+          Sélectionnez une autre zone ou affectez des stocks à cette zone.
+        </p>
+      </div>
+
+      <!-- Grille des stocks -->
+      <div *ngIf="filteredAtelierStocks.length > 0"
+           class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+
+        <div *ngFor="let stock of filteredAtelierStocks"
+             class="border rounded-2xl p-4 cursor-pointer hover:shadow-md transition flex flex-col gap-2"
+             [ngClass]="{
+               'border-orange-300 bg-orange-50': needsCheck(stock),
+               'border-green-300  bg-green-50':  !needsCheck(stock)
+             }"
+             (click)="openStockDetail(stock)">
+
+          <div class="flex items-center gap-3">
+            <img [src]="stock.product.picture || 'assets/images/default_image.jpg'"
+                 [alt]="stock.product.title"
+                 class="h-12 w-12 rounded-full object-cover border border-gray-200 flex-shrink-0">
+            <div>
+              <p class="font-bold text-sm text-gray-800 leading-tight">{{ stock.product.title }}</p>
+              <p class="text-xs text-gray-500">{{ stock.product.size }} — {{ stock.product.cmu }}</p>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap gap-1">
+            <span *ngFor="let a of getAlitracerList(stock)"
+                  class="bg-gray-100 border border-gray-300 text-gray-700 font-mono text-[10px] px-1.5 py-0.5 rounded">
+              {{ a }}
+            </span>
+          </div>
+
+          <div class="flex justify-between items-center mt-1 text-xs">
+            <span [ngClass]="getStatusClass(stock)">{{ getStatusLabel(stock) }}</span>
+            <span class="font-semibold"
+                  [ngClass]="needsCheck(stock) ? 'text-orange-500' : 'text-green-600'">
+              {{ needsCheck(stock) ? '⚠️ Ctrl à faire' : '✅ À jour' }}
+            </span>
+          </div>
+
+          <div class="text-[10px] text-gray-400">
+            Zone : {{ stock.zone?.name || 'N/A' }}
+          </div>
+
+          <div *ngIf="stock.lastRegulatoryCheckDate" class="text-[10px] text-gray-400">
+            Dernier ctrl régl. : {{ stock.lastRegulatoryCheckDate }}
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- DIALOG — Détail stock -->
+    <p-dialog
+      header="Détail stock"
+      [(visible)]="stockDetailDialogVisible"
+      [modal]="true" [closable]="true" [dismissableMask]="true"
+      [style]="{ width: '60vw', maxWidth: '600px' }">
+      <div *ngIf="selectedStock" class="flex flex-col gap-4 text-sm">
+
+        <div class="flex items-center gap-4">
+          <img [src]="selectedStock.product.picture || 'assets/images/default_image.jpg'"
+               [alt]="selectedStock.product.title"
+               class="h-16 w-16 rounded-full object-cover border border-gray-200 flex-shrink-0">
+          <div>
+            <p class="font-bold text-base text-gray-800 leading-tight">{{ selectedStock.product.title }}</p>
+            <p class="text-xs text-gray-500">{{ selectedStock.product.brand || 'N/A' }}</p>
+          </div>
+          <span class="ml-auto text-sm" [ngClass]="getStatusClass(selectedStock)">
+            {{ getStatusLabel(selectedStock) }}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap gap-1">
+          <span *ngFor="let a of getAlitracerList(selectedStock)"
+                class="bg-gray-100 border border-gray-300 text-gray-700 font-mono text-xs px-1.5 py-0.5 rounded">
+            {{ a }}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-3">
+          <div>
+            <p class="text-xs text-gray-400">Taille</p>
+            <p class="font-medium">{{ selectedStock.product.size || 'N/A' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">CMU</p>
+            <p class="font-medium">{{ selectedStock.product.cmu || 'N/A' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Référence</p>
+            <p class="font-medium">{{ selectedStock.reference || 'N/A' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Emplacement</p>
+            <p class="font-medium">
+              {{ selectedStock.lockerNumber ? ('Casier ' + selectedStock.lockerNumber) : (selectedStock.zone?.name || selectedStock.emplacement || 'N/A') }}
+            </p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Dernier contrôle</p>
+            <p class="font-medium">{{ selectedStock.lastCheckDate || 'Aucun' }}</p>
+          </div>
+          <div>
+            <p class="text-xs text-gray-400">Dernier contrôle réglementaire</p>
+            <p class="font-medium" [ngClass]="needsCheck(selectedStock) ? 'text-orange-500' : 'text-green-600'">
+              {{ selectedStock.lastRegulatoryCheckDate || '⚠️ Aucun' }}
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </p-dialog>
+
+    <!-- DIALOG — CRUD Zone avec carte + drag -->
+    <p-dialog
+      header="{{ zoneEditMode === 'CREATE' ? 'Nouvelle zone atelier' : 'Modifier la zone atelier' }}"
+      [(visible)]="zoneDialogVisible"
+      [modal]="true" [closable]="true" [dismissableMask]="true"
+      [style]="{ width: '80vw', maxWidth: '1100px' }"
+      [baseZIndex]="11000">
+
+      <div class="flex flex-col md:flex-row gap-4 text-sm p-1">
+
+        <!-- Carte avec drag -->
+        <div class="md:w-2/3 w-full">
+
+          <p class="text-xs text-gray-500 mb-2">
+            Dessinez la zone directement sur le plan (cliquer puis glisser en maintenant le clic).
+          </p>
+
+          <div
+            class="relative mx-auto overflow-hidden rounded-2xl border border-gray-200"
+            style="width: 100%; max-width: 1000px; height: 380px; cursor: crosshair;"
+            (mousedown)="onMapMouseDown($event)"
+            (mousemove)="onMapMouseMove($event)"
+            (mouseup)="onMapMouseUp($event)"
+            (mouseleave)="onMapMouseUp($event)">
+
+            <img
+              src="assets/images/plan-atelier.png"
+              alt="Plan atelier"
+              class="w-full h-full object-cover select-none pointer-events-none">
+
+            <div
+              *ngIf="zoneDialogVisible && (isDrawing || selectionPreview.w > 0)"
+              class="absolute border-2 border-blue-500 bg-blue-400/20 pointer-events-none"
+              [style.top.%]="selectionPreview.y"
+              [style.left.%]="selectionPreview.x"
+              [style.width.%]="selectionPreview.w"
+              [style.height.%]="selectionPreview.h">
+            </div>
+
+            <button
+              *ngFor="let z of zonesWithCoords"
+              type="button"
+              class="absolute bg-blue-500/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded
+                 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+              [style.top.%]="z.y"
+              [style.left.%]="z.x">
+              {{ z.zone.name }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Formulaire -->
+        <div class="md:w-1/3 w-full flex flex-col gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">
+              Nom de la zone
+            </label>
+            <input
+              type="text"
+              class="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+              placeholder="Zone 1"
+              [(ngModel)]="zoneForm.name">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">
+              Coordonnées (%) — centre (x, y) et dimensions (largeur, hauteur)
+            </label>
+            <div class="grid grid-cols-4 gap-2">
+              <input type="number" min="0" max="100"
+                     class="border border-gray-300 rounded px-1 py-1 text-xs text-center"
+                     [(ngModel)]="zoneForm.x" placeholder="x">
+              <input type="number" min="0" max="100"
+                     class="border border-gray-300 rounded px-1 py-1 text-xs text-center"
+                     [(ngModel)]="zoneForm.y" placeholder="y">
+              <input type="number" min="0" max="100"
+                     class="border border-gray-300 rounded px-1 py-1 text-xs text-center"
+                     [(ngModel)]="zoneForm.w" placeholder="w">
+              <input type="number" min="0" max="100"
+                     class="border border-gray-300 rounded px-1 py-1 text-xs text-center"
+                     [(ngModel)]="zoneForm.h" placeholder="h">
+            </div>
+            <p class="mt-1 text-[10px] text-gray-400">
+              Les champs se remplissent automatiquement quand tu dessines sur la carte.
+            </p>
+          </div>
+
+          <div class="flex justify-between items-center mt-auto pt-2">
+            <button
+              *ngIf="zoneEditMode === 'EDIT'"
+              type="button"
+              class="text-xs text-red-600 underline"
+              (click)="deleteZone()">
+              Supprimer la zone
+            </button>
+
+            <div class="flex gap-2 ml-auto">
+              <button
+                type="button"
+                class="px-3 py-1 text-xs rounded border border-gray-300 text-gray-600"
+                (click)="zoneDialogVisible = false">
+                Annuler
+              </button>
+              <button
+                type="button"
+                class="px-3 py-1 text-xs rounded bg-blue-600 text-white font-semibold"
+                (click)="saveZone()">
+                Enregistrer
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </p-dialog>
+
+    <p-toast></p-toast>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     ZONE DE SCAN PLEIN ÉCRAN
+     ════════════════════════════════════════════════════ -->
+<div *ngIf="scanDialogVisible" class="fixed inset-0 bg-black/80 z-50 flex flex-col">
+
+  <!-- Header -->
+  <div class="p-6 text-gray-100 bg-black/60 flex justify-between items-center">
+    <div>
+      <div class="flex items-center gap-2 mb-1">
+        <span *ngIf="scanMode === 'INDIVIDUAL'"
+              class="text-xs bg-blue-500 text-white font-bold px-2 py-0.5 rounded-full">INDIVIDUEL</span>
+        <span *ngIf="scanMode === 'REGULATORY'"
+              class="text-xs bg-green-500 text-white font-bold px-2 py-0.5 rounded-full">RÉGLEMENTAIRE</span>
+        <p class="font-bold text-lg">
+          📦 Contrôles Atelier
+          <span *ngIf="selectedZone">— Zone {{ selectedZone.name }}</span>
+        </p>
+      </div>
+      <p class="text-sm text-gray-300" *ngIf="scanMode === 'INDIVIDUAL'">
+        Scannez les alitracers des stocks de la zone sélectionnée.
+        <span class="text-blue-300">Ce contrôle ne modifie pas le ratio ni l'Excel.</span>
+      </p>
+      <p class="text-sm text-gray-300" *ngIf="scanMode === 'REGULATORY'">
+        Scannez les stocks non encore contrôlés réglementairement ce mois-ci.
+        <span class="text-green-300 ml-1">Ratio et Excel seront mis à jour.</span>
+      </p>
+    </div>
+    <button class="bg-red-500 hover:bg-red-700 text-white font-bold px-6 py-3 rounded-lg transition"
+            type="button" (click)="stopScan()">
+      <fa-icon [icon]="faStop"></fa-icon> Arrêter
+    </button>
+  </div>
+
+  <!-- Corps : vidéo + panneaux d'info -->
+  <div class="flex-1 flex flex-col lg:flex-row gap-4 p-4">
+
+    <!-- Vidéo + dernier alitracer -->
+    <div class="flex-1 flex flex-col items-center justify-center gap-3">
+      <div class="w-full max-w-md aspect-[3/4] bg-black rounded-2xl overflow-hidden border-4 border-yellow-400 relative">
+        <video
+          id="atelier-video"
+          autoplay
+          playsinline
+          class="w-full h-full object-cover">
+        </video>
+        <canvas
+          id="atelier-canvas"
+          class="hidden">
+        </canvas>
+      </div>
+
+      <div *ngIf="selectedStockForCheck"
+           class="mt-2 text-xs text-gray-200 bg-black/50 rounded-xl px-3 py-1">
+        Dernier alitracer scanné :
+        <span class="font-mono text-yellow-300">
+          {{ selectedStockForCheck.alitracer }}
+        </span>
+      </div>
+    </div>
+
+    <!-- Panneau de droite : à scanner / déjà scannés -->
+    <div class="w-full lg:w-80 max-w-full text-xs text-gray-100 flex flex-col gap-3">
+
+      <!-- À scanner (réglementaire) -->
+      <div class="bg-black/40 rounded-2xl border border-yellow-400/60 p-3">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-semibold text-sm">
+            À scanner (réglementaire)
+          </p>
+          <span class="text-[11px] text-gray-300">
+            {{ needsCheckCount }} restant(s)
+          </span>
+        </div>
+
+        <div class="max-h-40 overflow-y-auto space-y-1">
+          <ng-container *ngFor="let s of filteredAtelierStocks">
+            <div *ngIf="!isStockCheckedRegulatoryThisMonth(s)"
+                 class="flex items-center gap-2 px-2 py-1 rounded-md bg-yellow-500/10 border border-yellow-500/40"
+                 [ngClass]="selectedStockForCheck?.id === s.id ? 'ring-2 ring-yellow-300' : ''">
+              <span class="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400"></span>
+              <div class="flex-1">
+                <div class="font-mono text-[11px] text-yellow-200">
+                  <span *ngFor="let a of getAlitracerList(s); let last = last">
+                    {{ a }}<span *ngIf="!last">, </span>
+                  </span>
+                </div>
+                <div class="text-[10px] text-gray-300 truncate">
+                  {{ s.product.title }}
+                </div>
+              </div>
+            </div>
+          </ng-container>
+
+          <div *ngIf="needsCheckCount === 0"
+               class="text-[11px] text-green-300 italic">
+            Tous les stocks de cette zone sont contrôlés réglementairement ce mois-ci.
+          </div>
+        </div>
+      </div>
+
+      <!-- Déjà contrôlés ce mois (coche verte) -->
+      <div class="bg-black/40 rounded-2xl border border-green-500/60 p-3">
+        <div class="flex items-center justify-between mb-2">
+          <p class="font-semibold text-sm flex items-center gap-1">
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-black text-[10px] font-bold">✔</span>
+            Déjà contrôlés ce mois
+          </p>
+          <span class="text-[11px] text-gray-300">
+            {{ checkedThisMonthCount }}
+          </span>
+        </div>
+
+        <div class="max-h-40 overflow-y-auto space-y-1">
+          <ng-container *ngFor="let s of filteredAtelierStocks">
+            <div *ngIf="isStockCheckedRegulatoryThisMonth(s)"
+                 class="flex items-center gap-2 px-2 py-1 rounded-md bg-green-500/10 border border-green-500/40"
+                 [ngClass]="selectedStockForCheck?.id === s.id ? 'ring-2 ring-green-300' : ''">
+              <span class="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-500 text-black text-[10px] font-bold">✔</span>
+              <div class="flex-1">
+                <div class="font-mono text-[11px] text-green-200">
+                  <span *ngFor="let a of getAlitracerList(s); let last = last">
+                    {{ a }}<span *ngIf="!last">, </span>
+                  </span>
+                </div>
+                <div class="text-[10px] text-gray-300 truncate">
+                  {{ s.product.title }}
+                </div>
+              </div>
+              <div class="text-[10px] text-gray-400 whitespace-nowrap ml-1">
+                {{ s.lastRegulatoryCheckDate }}
+              </div>
+            </div>
+          </ng-container>
+
+          <div *ngIf="checkedThisMonthCount === 0"
+               class="text-[11px] text-gray-400 italic">
+            Aucun contrôle réglementaire ce mois-ci pour cette zone.
+          </div>
+        </div>
+      </div>
+
+      <!-- Rappel des stocks pris en compte -->
+      <div class="bg-black/30 rounded-2xl border border-gray-600/60 p-2">
+        <p class="text-gray-200 text-[11px]">
+          Stocks considérés : <b>{{ filteredAtelierStocks.length }}</b>
+          <span class="ml-1 text-[10px] text-gray-400 italic">
+            (seuls ces stocks seront reconnus lors du scan)
+          </span>
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- DIALOG — Contrôle OK / NOK / HS -->
+  <p-dialog
+    [header]="scanMode === 'REGULATORY' ? 'Contrôle Réglementaire' : 'Contrôle Individuel'"
+    [(visible)]="checkDialogVisible"
+    [modal]="true"
+    [closable]="true"
+    [dismissableMask]="true"
+    [style]="{ width: '45vw', maxWidth: '600px' }"
+    [baseZIndex]="100000">
+
+    <ng-container *ngIf="selectedStockForCheck">
+
+      <div class="mb-4 flex flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full"
+              [ngClass]="scanMode === 'REGULATORY'
+                ? 'bg-green-100 text-green-700'
+                : 'bg-blue-100 text-blue-700'">
+          <fa-icon [icon]="scanMode === 'REGULATORY' ? faShieldAlt : faUser"
+                   class="text-xs"></fa-icon>
+          {{ scanMode === 'REGULATORY' ? 'Contrôle Réglementaire' : 'Contrôle Individuel' }}
+        </span>
+        <span *ngIf="scanMode !== 'REGULATORY'" class="text-xs text-gray-400 italic">
+          Ce contrôle ne modifie pas le ratio ni le fichier Excel mensuel.
+        </span>
+        <span *ngIf="scanMode === 'REGULATORY'" class="text-xs text-green-600 font-medium">
+          Ce contrôle mettra à jour le ratio et le fichier Excel mensuel.
+        </span>
+      </div>
+
+      <div class="flex flex-col md:flex-row md:items-start gap-6 mb-6">
+        <div class="w-32 h-32 flex-shrink-0 flex items-center justify-center bg-gray-50 rounded border border-gray-100 overflow-hidden">
+          <img
+            class="max-w-full max-h-full object-contain"
+            [src]="selectedStockForCheck.product.picture || 'assets/images/default_image.jpg'"
+            alt="Product Image">
+        </div>
+        <div class="flex-1 text-sm">
+          <p class="text-lg font-bold mb-1">{{ selectedStockForCheck.product.title }}</p>
+          <p class="text-gray-600 mb-2">
+            ID Alitracer : {{ selectedStockForCheck.alitracer }} •
+            <span *ngIf="selectedStockForCheck.zone?.name">Zone {{ selectedStockForCheck.zone.name }}</span>
+          </p>
+          <div class="grid grid-cols-2 gap-x-6 mt-2">
+            <div>
+              <div class="text-gray-500">Type</div>
+              <div class="text-black">{{ selectedStockForCheck.product.type }}</div>
+              <div class="text-gray-500 mt-2">Marque</div>
+              <div class="text-black">{{ selectedStockForCheck.product.brand }}</div>
+            </div>
+            <div>
+              <div class="text-gray-500">Taille</div>
+              <div class="text-black">{{ selectedStockForCheck.product.size }}</div>
+              <div class="text-gray-500 mt-2">CMU</div>
+              <div class="text-black">{{ selectedStockForCheck.product.cmu }}</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <div class="text-gray-500">Statut actuel</div>
+            <div [ngClass]="getStatusClass(selectedStockForCheck)">
+              {{ getStatusLabel(selectedStockForCheck) }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4 text-sm">
+        <label class="block text-gray-700 font-bold mb-2">Commentaire (optionnel)</label>
+        <textarea class="border border-gray-300 p-2 focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm rounded-md"
+                  [(ngModel)]="checkComment" rows="3"
+                  placeholder="Analyse visuelle du produit"></textarea>
+      </div>
+
+      <div class="grid grid-cols-3 gap-4 mt-2">
+        <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded text-lg transition"
+                type="button" (click)="confirmCheck(1)">OK</button>
+        <button class="bg-orange-500 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded text-lg transition"
+                type="button" (click)="confirmCheck(0)">NOK</button>
+        <button class="bg-red-500 hover:bg-red-700 text-white font-bold py-3 px-4 rounded text-lg transition"
+                type="button" (click)="confirmCheck(2)">HS</button>
+      </div>
+    </ng-container>
+  </p-dialog>
+
+</div>
